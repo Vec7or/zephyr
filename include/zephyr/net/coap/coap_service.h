@@ -13,7 +13,7 @@
 #ifndef ZEPHYR_INCLUDE_NET_COAP_SERVICE_H_
 #define ZEPHYR_INCLUDE_NET_COAP_SERVICE_H_
 
-#include <zephyr/net/coap.h>
+#include <zephyr/net/coap/coap.h>
 #include <zephyr/sys/iterable_sections.h>
 #include <zephyr/net/tls_credentials.h>
 

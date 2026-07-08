@@ -13,7 +13,7 @@
 #include <zephyr/fff.h>
 #include <zephyr/ztest.h>
 
-#include <zephyr/net/coap_client.h>
+#include <zephyr/net/coap/coap_client.h>
 
 
 /* Copy from zephyr/include/zephyr/net/socket.h */

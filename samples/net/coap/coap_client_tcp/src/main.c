@@ -20,8 +20,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/net/socket.h>
 #include <zephyr/net/net_ip.h>
-#include <zephyr/net/coap.h>
-#include <zephyr/net/coap_client_tcp.h>
+#include <zephyr/net/coap/coap.h>
+#include <zephyr/net/coap/coap_client_tcp.h>
 #include <zephyr/logging/log.h>
 #include <arpa/inet.h>
 

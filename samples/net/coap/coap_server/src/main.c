@@ -7,7 +7,7 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(net_coap_service_sample, LOG_LEVEL_DBG);
 
-#include <zephyr/net/coap_service.h>
+#include <zephyr/net/coap/coap_service.h>
 
 #include "net_sample_common.h"
 

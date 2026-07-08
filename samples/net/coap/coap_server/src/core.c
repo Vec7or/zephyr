@@ -9,8 +9,8 @@
 LOG_MODULE_DECLARE(net_coap_service_sample);
 
 #include <zephyr/sys/printk.h>
-#include <zephyr/net/coap_service.h>
-#include <zephyr/net/coap_link_format.h>
+#include <zephyr/net/coap/coap_service.h>
+#include <zephyr/net/coap/coap_link_format.h>
 
 static int core_get(struct coap_resource *resource,
 		    struct coap_packet *request,

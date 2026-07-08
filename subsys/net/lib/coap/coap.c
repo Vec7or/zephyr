@@ -24,8 +24,8 @@ LOG_MODULE_REGISTER(net_coap, CONFIG_COAP_LOG_LEVEL);
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/net_core.h>
 #include <zephyr/net/net_log.h>
-#include <zephyr/net/coap.h>
-#include <zephyr/net/coap_mgmt.h>
+#include <zephyr/net/coap/coap.h>
+#include <zephyr/net/coap/coap_mgmt.h>
 
 #define COAP_PATH_ELEM_DELIM '/'
 #define COAP_PATH_ELEM_QUERY '?'

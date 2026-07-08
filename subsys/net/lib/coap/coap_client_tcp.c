@@ -23,8 +23,8 @@
 LOG_MODULE_DECLARE(net_coap, CONFIG_COAP_LOG_LEVEL);
 
 #include <zephyr/net/socket.h>
-#include <zephyr/net/coap.h>
-#include <zephyr/net/coap_client_tcp.h>
+#include <zephyr/net/coap/coap.h>
+#include <zephyr/net/coap/coap_client_tcp.h>
 
 #define COAP_PERIODIC_TIMEOUT 500
 

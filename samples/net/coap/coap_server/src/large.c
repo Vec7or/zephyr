@@ -9,7 +9,7 @@
 LOG_MODULE_DECLARE(net_coap_service_sample);
 
 #include <zephyr/sys/printk.h>
-#include <zephyr/net/coap_service.h>
+#include <zephyr/net/coap/coap_service.h>
 
 #define BLOCK_WISE_TRANSFER_SIZE_GET 2048
 

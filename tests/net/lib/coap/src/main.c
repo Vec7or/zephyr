@@ -16,7 +16,7 @@ LOG_MODULE_REGISTER(net_test, LOG_LEVEL_DBG);
 #include <zephyr/sys/printk.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
-#include <zephyr/net/coap.h>
+#include <zephyr/net/coap/coap.h>
 
 #include <zephyr/tc_util.h>
 #include <zephyr/ztest.h>

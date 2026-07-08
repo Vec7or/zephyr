@@ -52,7 +52,7 @@ You can now define your service as part of the application:
 
 .. code-block:: c
 
-    #include <zephyr/net/coap_service.h>
+    #include <zephyr/net/coap/coap_service.h>
 
     static const uint16_t my_service_port = 5683;
 
@@ -71,7 +71,7 @@ The following is an example of a CoAP resource registered with our service:
 
 .. code-block:: c
 
-    #include <zephyr/net/coap_service.h>
+    #include <zephyr/net/coap/coap_service.h>
 
     static int my_get(struct coap_resource *resource, struct coap_packet *request,
                       struct net_sockaddr *addr, socklen_t addr_len)
@@ -136,7 +136,7 @@ of CoAP services. An example using a temperature sensor can look like:
 
     #include <zephyr/kernel.h>
     #include <zephyr/drivers/sensor.h>
-    #include <zephyr/net/coap_service.h>
+    #include <zephyr/net/coap/coap_service.h>
 
     static void notify_observers(struct k_work *work);
     K_WORK_DELAYABLE_DEFINE(temp_work, notify_observers);
@@ -236,8 +236,8 @@ following example simply prints when an event occurs.
 .. code-block:: c
 
     #include <zephyr/sys/printk.h>
-    #include <zephyr/net/coap_mgmt.h>
-    #include <zephyr/net/coap_service.h>
+    #include <zephyr/net/coap/coap_mgmt.h>
+    #include <zephyr/net/coap/coap_service.h>
 
     #define COAP_EVENTS_SET (NET_EVENT_COAP_OBSERVER_ADDED | NET_EVENT_COAP_OBSERVER_REMOVED | \
                              NET_EVENT_COAP_SERVICE_STARTED | NET_EVENT_COAP_SERVICE_STOPPED)

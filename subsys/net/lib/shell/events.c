@@ -13,7 +13,7 @@ LOG_MODULE_DECLARE(net_shell);
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/net_event.h>
 #include <zephyr/net/net_log.h>
-#include <zephyr/net/coap_mgmt.h>
+#include <zephyr/net/coap/coap_mgmt.h>
 #include <zephyr/net/ethernet_mgmt.h>
 
 #include "net_shell_private.h"

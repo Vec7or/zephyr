@@ -31,7 +31,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/types.h>
 #include <zephyr/sys/mutex.h>
-#include <zephyr/net/coap.h>
+#include <zephyr/net/coap/coap.h>
 #include <zephyr/net/lwm2m_path.h>
 
 #ifdef __cplusplus
