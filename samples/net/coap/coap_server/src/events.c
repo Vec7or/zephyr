@@ -7,8 +7,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(net_coap_service_sample);
 
-#include <zephyr/net/coap_mgmt.h>
-#include <zephyr/net/coap_service.h>
+#include <zephyr/net/coap/coap_mgmt.h>
+#include <zephyr/net/coap/coap_service.h>
 
 #define COAP_EVENTS_SET (NET_EVENT_COAP_OBSERVER_ADDED | NET_EVENT_COAP_OBSERVER_REMOVED |	\
 			 NET_EVENT_COAP_SERVICE_STARTED | NET_EVENT_COAP_SERVICE_STOPPED)

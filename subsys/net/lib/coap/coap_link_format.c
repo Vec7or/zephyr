@@ -18,8 +18,8 @@ LOG_MODULE_DECLARE(net_coap, CONFIG_COAP_LOG_LEVEL);
 
 #include <zephyr/sys/printk.h>
 
-#include <zephyr/net/coap.h>
-#include <zephyr/net/coap_link_format.h>
+#include <zephyr/net/coap/coap.h>
+#include <zephyr/net/coap/coap_link_format.h>
 
 static inline bool append_u8(struct coap_packet *cpkt, uint8_t data)
 {

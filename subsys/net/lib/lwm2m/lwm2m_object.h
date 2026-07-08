@@ -55,7 +55,7 @@
 #include <sys/types.h>
 #include <time.h>
 
-#include <zephyr/net/coap.h>
+#include <zephyr/net/coap/coap.h>
 #include <zephyr/net/lwm2m.h>
 
 #include "buf_util.h"

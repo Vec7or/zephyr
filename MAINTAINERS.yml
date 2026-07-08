@@ -4457,7 +4457,7 @@ Networking:
     - include/zephyr/net/dsa*.h
     - include/zephyr/net/lldp.h
     - samples/net/ethernet/
-    - samples/net/sockets/coap_*/
+    - samples/net/coap/coap_*/
     - samples/net/sockets/*http*/
     - samples/net/lwm2m_client/
     - samples/net/ocpp/
@@ -4531,7 +4531,7 @@ Networking:
     - pdgendt
   files:
     - subsys/net/lib/coap/
-    - samples/net/sockets/coap_*/
+    - samples/net/coap/coap_*/
     - tests/net/lib/coap/
   labels:
     - "area: Networking"

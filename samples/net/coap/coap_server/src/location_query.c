@@ -9,7 +9,7 @@
 LOG_MODULE_DECLARE(net_coap_service_sample);
 
 #include <zephyr/sys/printk.h>
-#include <zephyr/net/coap_service.h>
+#include <zephyr/net/coap/coap_service.h>
 
 static int location_query_post(struct coap_resource *resource,
 			       struct coap_packet *request,

@@ -22,8 +22,8 @@
  * @{
  */
 
-#include <zephyr/net/coap.h>
-#include <zephyr/net/coap_client.h>
+#include <zephyr/net/coap/coap.h>
+#include <zephyr/net/coap/coap_client.h>
 #include <zephyr/kernel.h>
 
 #ifdef __cplusplus

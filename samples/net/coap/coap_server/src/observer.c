@@ -10,7 +10,7 @@ LOG_MODULE_DECLARE(net_coap_service_sample);
 
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
-#include <zephyr/net/coap_service.h>
+#include <zephyr/net/coap/coap_service.h>
 
 static int obs_counter;
 

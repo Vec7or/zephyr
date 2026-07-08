@@ -5,7 +5,7 @@
  */
 
 #include <string.h>
-#include <zephyr/net/coap_service.h>
+#include <zephyr/net/coap/coap_service.h>
 #include <zephyr/shell/shell.h>
 
 

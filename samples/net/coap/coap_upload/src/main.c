@@ -8,7 +8,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/misc/lorem_ipsum.h>
 #include <zephyr/net/socket.h>
-#include <zephyr/net/coap_client.h>
+#include <zephyr/net/coap/coap_client.h>
 #include <inttypes.h>
 #include <errno.h>
 #include <zephyr/posix/sys/socket.h>

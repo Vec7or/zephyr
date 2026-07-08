@@ -12,10 +12,10 @@ LOG_MODULE_DECLARE(net_coap, CONFIG_COAP_LOG_LEVEL);
 
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
-#include <zephyr/net/coap.h>
-#include <zephyr/net/coap_link_format.h>
-#include <zephyr/net/coap_mgmt.h>
-#include <zephyr/net/coap_service.h>
+#include <zephyr/net/coap/coap.h>
+#include <zephyr/net/coap/coap_link_format.h>
+#include <zephyr/net/coap/coap_mgmt.h>
+#include <zephyr/net/coap/coap_service.h>
 #include <zephyr/sys/fdtable.h>
 #include <zephyr/zvfs/eventfd.h>
 

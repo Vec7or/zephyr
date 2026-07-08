@@ -12,7 +12,7 @@ LOG_MODULE_REGISTER(updatehub, CONFIG_UPDATEHUB_LOG_LEVEL);
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/udp.h>
-#include <zephyr/net/coap.h>
+#include <zephyr/net/coap/coap.h>
 #include <zephyr/net/dns_resolve.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/data/json.h>

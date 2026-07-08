@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include <zephyr/ztest.h>
-#include <zephyr/net/coap_service.h>
+#include <zephyr/net/coap/coap_service.h>
 
 static int coap_method1(struct coap_resource *resource, struct coap_packet *request,
 			struct net_sockaddr *addr, net_socklen_t addr_len)

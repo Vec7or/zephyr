@@ -22,7 +22,7 @@
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/udp.h>
-#include <zephyr/net/coap.h>
+#include <zephyr/net/coap/coap.h>
 
 #include "net_sample_common.h"
 

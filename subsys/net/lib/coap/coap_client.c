@@ -14,8 +14,8 @@ LOG_MODULE_DECLARE(net_coap, CONFIG_COAP_LOG_LEVEL);
 #include <zephyr/net/socket.h>
 #include <zephyr/zvfs/eventfd.h>
 
-#include <zephyr/net/coap.h>
-#include <zephyr/net/coap_client.h>
+#include <zephyr/net/coap/coap.h>
+#include <zephyr/net/coap/coap_client.h>
 
 #define COAP_VERSION 1
 #define COAP_SEPARATE_TIMEOUT 6000
