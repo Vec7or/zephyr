@@ -1,6 +1,7 @@
 # CoAP implementation for Zephyr
 
 # Copyright (c) 2017 Intel Corporation
+# Copyright (c) 2026 Siemens AG
 # SPDX-License-Identifier: Apache-2.0
 
 config COAP
@@ -338,6 +339,42 @@ config COAP_SERVER_SHELL
 	  Enable CoAP service shell commands.
 
 endif
+
+config COAP_OSCORE
+	bool "OSCORE support for CoAP (RFC 8613)"
+	depends on UOSCORE
+	help
+	  Enable Object Security for Constrained RESTful Environments (OSCORE)
+	  support for CoAP server. OSCORE provides end-to-end protection of
+	  CoAP messages using COSE (CBOR Object Signing and Encryption).
+
+	  This option requires the uoscore-uedhoc module and PSA Crypto support.
+	  When enabled, CoAP messages can be protected with OSCORE by using a
+	  OSCORE enabled service.
+
+	  See RFC 8613 for details.
+
+if COAP_OSCORE
+
+config COAP_OSCORE_MAX_PLAINTEXT_LEN
+	int "Maximum OSCORE plaintext length"
+	default 1024
+	help
+	  Maximum length of OSCORE plaintext (CoAP message before encryption).
+	  This includes the CoAP options and payload that will be encrypted.
+	  Adjust based on your application's message size requirements.
+
+config COAP_OSCORE_MAX_CONTEXTS
+	int "Maximum number of OSCORE security contexts"
+	default 1
+	range 1 32
+	help
+	  Number of OSCORE security contexts that can be allocated at runtime
+	  through coap_oscore_context_init(). Each context is used to protect
+	  and verify messages for one CoAP client or service. Increase this if
+	  your application uses more than one OSCORE-enabled endpoint at a time.
+
+endif # COAP_OSCORE
 
 module = COAP
 module-dep = NET_LOG
