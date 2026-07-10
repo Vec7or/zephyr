@@ -15,15 +15,57 @@
 #ifndef ZEPHYR_INCLUDE_NET_COAP_OSCORE_H_
 #define ZEPHYR_INCLUDE_NET_COAP_OSCORE_H_
 
+#if defined(CONFIG_COAP_OSCORE)
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
 #include <zephyr/net/net_ip.h>
+#include <zephyr/net/coap/coap.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * @brief OSCORE exchange entry.
+ *
+ * Tracks which server responses need OSCORE protection by matching the client
+ * address and request token (RFC 8613 Section 8.3). A CoAP service defined with
+ * @ref COAP_SERVICE_DEFINE_OSCORE owns a statically allocated cache of these
+ * entries.
+ */
+struct coap_oscore_exchange {
+	struct net_sockaddr addr;          /**< Client address */
+	net_socklen_t addr_len;            /**< Address length */
+	uint8_t token[COAP_TOKEN_MAX_LEN]; /**< Token from the request */
+	uint8_t tkl;                       /**< Token length */
+	int64_t timestamp;                 /**< Creation timestamp */
+};
+
+#if defined(CONFIG_COAP_TEST_API_ENABLE)
+
+/**
+ * @brief Find OSCORE exchange entry (for testing)
+ */
+struct coap_oscore_exchange *oscore_exchange_find(struct coap_oscore_exchange *cache,
+						  const struct net_sockaddr *addr,
+						  net_socklen_t addr_len, const uint8_t *token,
+						  uint8_t tkl);
+
+/**
+ * @brief Add or update OSCORE exchange entry (for testing)
+ */
+int oscore_exchange_add(struct coap_oscore_exchange *cache, const struct net_sockaddr *addr,
+			net_socklen_t addr_len, const uint8_t *token, uint8_t tkl);
+
+/**
+ * @brief Remove OSCORE exchange entry (for testing)
+ */
+void oscore_exchange_remove(struct coap_oscore_exchange *cache, const struct net_sockaddr *addr,
+			    net_socklen_t addr_len, const uint8_t *token, uint8_t tkl);
+#endif /* CONFIG_COAP_TEST_API_ENABLE */
 
 /**
  * @brief CoAP OSCORE API
@@ -138,5 +180,7 @@ void coap_oscore_context_free(struct coap_oscore_context *ctx);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* CONFIG_COAP_OSCORE */
 
 #endif /* ZEPHYR_INCLUDE_NET_COAP_OSCORE_H_ */

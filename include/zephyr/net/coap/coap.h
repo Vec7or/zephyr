@@ -331,6 +331,10 @@ struct coap_observer {
 	uint8_t token[8];
 	/** Extended token length */
 	uint8_t tkl;
+#if defined(CONFIG_COAP_OSCORE)
+	/** True if the observer is OSCORE protected */
+	bool is_oscore;
+#endif
 };
 
 /**
@@ -349,6 +353,12 @@ struct coap_packet {
 	 * @kconfig_dep{CONFIG_COAP_KEEP_USER_DATA}
 	 */
 	void *user_data;
+#endif
+#if defined(CONFIG_COAP_OSCORE)
+	/**
+	 * True if the packet was received OSCORE protected
+	 */
+	bool is_oscore;
 #endif
 };
 
@@ -1010,8 +1020,13 @@ size_t coap_next_block(const struct coap_packet *cpkt, struct coap_block_context
  * @param request Request on which the observer will be based
  * @param addr Address of the remote device
  */
+#if defined(CONFIG_COAP_OSCORE)
+void coap_observer_init(struct coap_observer *observer, const struct coap_packet *request,
+			const struct net_sockaddr *addr, bool is_oscore);
+#else
 void coap_observer_init(struct coap_observer *observer, const struct coap_packet *request,
 			const struct net_sockaddr *addr);
+#endif
 
 /**
  * @brief After the observer is initialized, associate the observer

@@ -13,8 +13,10 @@ LOG_MODULE_REGISTER(coap_oscore, CONFIG_COAP_LOG_LEVEL);
 #include <zephyr/kernel.h>
 #include <zephyr/net/coap/coap.h>
 #include <zephyr/net/coap/coap_oscore.h>
+#include <zephyr/net/coap/coap_service.h>
 
 #include "oscore.h"
+#include "coap_internal.h"
 #include "common/oscore_edhoc_error.h"
 
 /*
@@ -304,4 +306,91 @@ void coap_oscore_context_free(struct coap_oscore_context *ctx)
 	k_mutex_lock(&oscore_ctx_pool_lock, K_FOREVER);
 	memset(ctx, 0, sizeof(*ctx));
 	k_mutex_unlock(&oscore_ctx_pool_lock);
+}
+
+/* Find OSCORE exchange entry for a given address and token */
+struct coap_oscore_exchange *oscore_exchange_find(struct coap_oscore_exchange *cache,
+						  const struct net_sockaddr *addr,
+						  net_socklen_t addr_len, const uint8_t *token,
+						  uint8_t tkl)
+{
+	int64_t now = k_uptime_get();
+
+	for (int i = 0; i < CONFIG_COAP_OSCORE_EXCHANGE_CACHE_SIZE; i++) {
+		if (cache[i].addr_len == 0) {
+			continue;
+		}
+
+		/* Check if entry has expired */
+		if ((now - cache[i].timestamp) > CONFIG_COAP_OSCORE_EXCHANGE_LIFETIME_MS) {
+			/* Entry expired, clear it */
+			memset(&cache[i], 0, sizeof(cache[i]));
+			continue;
+		}
+
+		/* Check if address and token match */
+		if (cache[i].tkl == tkl && coap_sockaddr_equal(&cache[i].addr, addr) &&
+		    memcmp(cache[i].token, token, tkl) == 0) {
+			return &cache[i];
+		}
+	}
+
+	return NULL;
+}
+
+/* Add or update OSCORE exchange entry */
+int oscore_exchange_add(struct coap_oscore_exchange *cache, const struct net_sockaddr *addr,
+			net_socklen_t addr_len, const uint8_t *token, uint8_t tkl)
+{
+	struct coap_oscore_exchange *entry;
+	int64_t now = k_uptime_get();
+
+	if (tkl > COAP_TOKEN_MAX_LEN) {
+		return -EINVAL;
+	}
+
+	/* Check if entry already exists */
+	entry = oscore_exchange_find(cache, addr, addr_len, token, tkl);
+	if (entry != NULL) {
+		/* Update existing entry */
+		entry->timestamp = now;
+		return 0;
+	}
+
+	/* Find empty entry */
+	for (int i = 0; i < CONFIG_COAP_OSCORE_EXCHANGE_CACHE_SIZE; i++) {
+		if (cache[i].addr_len == 0) {
+			entry = &cache[i];
+			break;
+		}
+	}
+
+	/* Fail if no more entries available */
+	if (entry == NULL) {
+		return -ENOMEM;
+	}
+
+	/* Populate entry */
+	if (addr_len > sizeof(entry->addr)) {
+		return -EINVAL;
+	}
+	memcpy(&entry->addr, addr, addr_len);
+	entry->addr_len = addr_len;
+	memcpy(entry->token, token, tkl);
+	entry->tkl = tkl;
+	entry->timestamp = now;
+
+	return 0;
+}
+
+/* Remove OSCORE exchange entry */
+void oscore_exchange_remove(struct coap_oscore_exchange *cache, const struct net_sockaddr *addr,
+			    net_socklen_t addr_len, const uint8_t *token, uint8_t tkl)
+{
+	struct coap_oscore_exchange *entry;
+
+	entry = oscore_exchange_find(cache, addr, addr_len, token, tkl);
+	if (entry != NULL) {
+		memset(entry, 0, sizeof(*entry));
+	}
 }

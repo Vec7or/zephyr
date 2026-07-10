@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2026 Martin Schröder <info@swedishembedded.com>
+ * Copyright (c) 2026 Siemens AG
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -63,6 +64,29 @@ int coap_oscore_protect(const uint8_t *coap_msg, uint32_t coap_msg_len, uint8_t 
 int coap_oscore_verify(const uint8_t *oscore_msg, uint32_t oscore_msg_len, uint8_t *coap_msg,
 		       uint32_t *coap_msg_len, struct coap_oscore_context *ctx,
 		       uint8_t *error_code);
+
+#if !defined(CONFIG_COAP_TEST_API_ENABLE)
+/**
+ * @brief Find OSCORE exchange entry
+ */
+struct coap_oscore_exchange *oscore_exchange_find(struct coap_oscore_exchange *cache,
+						  const struct net_sockaddr *addr,
+						  net_socklen_t addr_len, const uint8_t *token,
+						  uint8_t tkl);
+
+/**
+ * @brief Add or update OSCORE exchange entry
+ */
+int oscore_exchange_add(struct coap_oscore_exchange *cache, const struct net_sockaddr *addr,
+			net_socklen_t addr_len, const uint8_t *token, uint8_t tkl);
+
+/**
+ * @brief Remove OSCORE exchange entry
+ */
+void oscore_exchange_remove(struct coap_oscore_exchange *cache, const struct net_sockaddr *addr,
+			    net_socklen_t addr_len, const uint8_t *token, uint8_t tkl);
+
+#endif /* !CONFIG_COAP_TEST_API_ENABLE */
 
 #endif /* CONFIG_COAP_OSCORE */
 

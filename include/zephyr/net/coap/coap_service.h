@@ -17,13 +17,12 @@
 #include <zephyr/sys/iterable_sections.h>
 #include <zephyr/net/tls_credentials.h>
 
-#ifdef __cplusplus
-extern "C" {
+#if defined(CONFIG_COAP_OSCORE)
+#include <zephyr/net/coap/coap_oscore.h>
 #endif
 
-#if defined(CONFIG_COAP_OSCORE)
-/* Forward declaration for OSCORE context */
-struct coap_oscore_context;
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /**
@@ -52,18 +51,6 @@ struct coap_service_data {
 	int sock_fd;
 	struct coap_observer observers[CONFIG_COAP_SERVICE_OBSERVERS];
 	struct coap_pending pending[CONFIG_COAP_SERVICE_PENDING_MESSAGES];
-#if defined(CONFIG_COAP_OSCORE)
-	/**
-	 * OSCORE security context for verifying requests and protecting responses.
-	 * Set to NULL to disable OSCORE for this service.
-	 */
-	struct coap_oscore_context *oscore_ctx;
-	/**
-	 * If true, require OSCORE for all requests to this service.
-	 * Requests without OSCORE will be rejected with 4.01 Unauthorized.
-	 */
-	bool require_oscore;
-#endif
 };
 
 struct coap_service {
@@ -78,6 +65,25 @@ struct coap_service {
 	const sec_tag_t *sec_tag_list;
 	size_t sec_tag_list_size;
 #endif
+#if defined(CONFIG_COAP_OSCORE)
+	/**
+	 * Provider returning the OSCORE security context to use for this service,
+	 * or NULL if the service is not OSCORE-enabled. Invoked by the CoAP server
+	 * when a request/response needs OSCORE processing, so the context can be
+	 * derived lazily once its keying material is available.
+	 */
+	struct coap_oscore_context *(*oscore_ctx_provider)(void);
+	/**
+	 * OSCORE exchange cache tracking which responses need OSCORE protection.
+	 * Points to a statically allocated per-service array, or NULL when the
+	 * service is not OSCORE-enabled.
+	 */
+	struct coap_oscore_exchange *oscore_exchange_cache;
+	/**
+	 * If true, requests without OSCORE are rejected with 4.01 Unauthorized.
+	 */
+	bool oscore_required;
+#endif
 };
 
 #if defined(CONFIG_NET_SOCKETS_ENABLE_DTLS)
@@ -87,8 +93,24 @@ struct coap_service {
 #define __z_coap_service_secure(...)
 #endif
 
+#if defined(CONFIG_COAP_OSCORE)
+/* Statically define the per-service OSCORE exchange cache. */
+#define __z_coap_oscore_cache_define(_name)                                                        \
+	static struct coap_oscore_exchange _CONCAT(coap_oscore_exchange_cache_,                    \
+						   _name)[CONFIG_COAP_OSCORE_EXCHANGE_CACHE_SIZE];
+#define __z_coap_oscore_cache_ptr(_name) (_CONCAT(coap_oscore_exchange_cache_, _name))
+#define __z_coap_service_oscore(_provider, _cache, _required)                                      \
+	.oscore_ctx_provider = (_provider), .oscore_exchange_cache = (_cache),                     \
+	.oscore_required = (_required),
+#else
+#define __z_coap_oscore_cache_define(_name)
+#define __z_coap_oscore_cache_ptr(_name) NULL
+#define __z_coap_service_oscore(...)
+#endif
+
 #define __z_coap_service_define(_name, _host, _port, _flags, _res_begin, _res_end, _sec_tag_list,  \
-				_sec_tag_list_size)                                                \
+				_sec_tag_list_size, _oscore_provider, _oscore_cache,               \
+				_oscore_required)                                                  \
 	static struct coap_service_data _CONCAT(coap_service_data_, _name) = {                     \
 		.sock_fd = -1,                                                                     \
 	};                                                                                         \
@@ -97,7 +119,9 @@ struct coap_service {
 				  .flags = _flags, .res_begin = (_res_begin),                      \
 				  .res_end = (_res_end),                                           \
 				  .data = &_CONCAT(coap_service_data_, _name),                     \
-				  __z_coap_service_secure(_sec_tag_list, _sec_tag_list_size)}
+				  __z_coap_service_secure(_sec_tag_list, _sec_tag_list_size)       \
+					  __z_coap_service_oscore(_oscore_provider, _oscore_cache, \
+								  _oscore_required)}
 
 /** @endcond */
 
@@ -163,7 +187,8 @@ struct coap_service {
 	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[];         \
 	__z_coap_service_define(_name, _host, _port, _flags,                                       \
 				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[0],         \
-				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[0], NULL, 0)
+				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[0], NULL, 0,  \
+				NULL, NULL, false)
 
 /**
  * @brief Define a CoAP secure service with static resources.
@@ -194,7 +219,69 @@ struct coap_service {
 	__z_coap_service_define(_name, _host, _port, _flags,                                       \
 				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[0],         \
 				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[0],           \
-				_sec_tag_list, _sec_tag_list_size)
+				_sec_tag_list, _sec_tag_list_size, NULL, NULL, false)
+
+/**
+ * @brief Define an OSCORE-enabled CoAP service with static resources.
+ *
+ * Behaves like @ref COAP_SERVICE_DEFINE but additionally wires OSCORE support
+ * (RFC 8613) into the service. A per-service OSCORE exchange cache is allocated
+ * statically, and the security context is obtained lazily from
+ * @p _oscore_ctx_provider so its keying material can be derived at runtime.
+ *
+ * @note Requires @kconfig{CONFIG_COAP_OSCORE}. When that option is disabled the
+ * service degrades to a plain @ref COAP_SERVICE_DEFINE.
+ *
+ * @param _name Name of the service.
+ * @param _host IP address or hostname associated with the service.
+ * @param[inout] _port Pointer to port associated with the service.
+ * @param _flags Configuration flags @see @ref COAP_SERVICE_FLAGS.
+ * @param _oscore_ctx_provider Function of type
+ *        `struct coap_oscore_context *(*)(void)` returning the OSCORE context to
+ *        use, or NULL if OSCORE is currently unavailable.
+ * @param _oscore_required If true, requests without OSCORE are rejected with
+ *        4.01 Unauthorized.
+ */
+#define COAP_SERVICE_DEFINE_OSCORE(_name, _host, _port, _flags, _oscore_ctx_provider,              \
+				   _oscore_required)                                               \
+	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[];       \
+	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[];         \
+	__z_coap_oscore_cache_define(_name) __z_coap_service_define(                               \
+		_name, _host, _port, _flags,                                                       \
+		&_CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[0],                         \
+		&_CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[0], NULL, 0,                  \
+		(_oscore_ctx_provider), __z_coap_oscore_cache_ptr(_name), (_oscore_required))
+
+/**
+ * @brief Define an OSCORE-enabled CoAP secure (DTLS) service with static resources.
+ *
+ * Combines @ref COAPS_SERVICE_DEFINE with OSCORE support as described in
+ * @ref COAP_SERVICE_DEFINE_OSCORE.
+ *
+ * @param _name Name of the service.
+ * @param _host IP address or hostname associated with the service.
+ * @param[inout] _port Pointer to port associated with the service.
+ * @param _flags Configuration flags @see @ref COAP_SERVICE_FLAGS.
+ * @param _sec_tag_list DTLS security tag list used to setup a COAPS socket.
+ * @param _sec_tag_list_size DTLS security tag list size used to setup a COAPS socket.
+ * @param _oscore_ctx_provider Function of type
+ *        `struct coap_oscore_context *(*)(void)` returning the OSCORE context to
+ *        use, or NULL if OSCORE is currently unavailable.
+ * @param _oscore_required If true, requests without OSCORE are rejected with
+ *        4.01 Unauthorized.
+ */
+#define COAPS_SERVICE_DEFINE_OSCORE(_name, _host, _port, _flags, _sec_tag_list,                    \
+				    _sec_tag_list_size, _oscore_ctx_provider, _oscore_required)    \
+	BUILD_ASSERT(IS_ENABLED(CONFIG_NET_SOCKETS_ENABLE_DTLS),                                   \
+		     "DTLS is required for CoAP secure (CONFIG_NET_SOCKETS_ENABLE_DTLS)");         \
+	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[];       \
+	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[];         \
+	__z_coap_oscore_cache_define(_name)                                                        \
+		__z_coap_service_define(_name, _host, _port, _flags,                               \
+					&_CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[0], \
+					&_CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[0],   \
+					_sec_tag_list, _sec_tag_list_size, (_oscore_ctx_provider), \
+					__z_coap_oscore_cache_ptr(_name), (_oscore_required))
 
 /**
  * @brief Count the number of CoAP services.
