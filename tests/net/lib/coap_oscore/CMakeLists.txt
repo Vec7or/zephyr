@@ -10,3 +10,5 @@ target_include_directories(app PRIVATE
   ${ZEPHYR_BASE}/subsys/net/ip
   ${ZEPHYR_BASE}/subsys/net/lib/coap
 )
+
+zephyr_linker_sources(DATA_SECTIONS sections-ram.ld)
