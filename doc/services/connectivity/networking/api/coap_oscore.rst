@@ -25,6 +25,13 @@ OSCORE protects CoAP messages at the application layer, providing:
 Unlike DTLS, OSCORE provides end-to-end security that survives proxy translation
 between different transport protocols (UDP, TCP, HTTP).
 
+Additional OSCORE configuration options:
+
+- :kconfig:option:`CONFIG_COAP_OSCORE_MAX_CONTEXTS`: Maximum number of OSCORE security contexts (default 8)
+- :kconfig:option:`CONFIG_COAP_OSCORE_MAX_PLAINTEXT_LEN`: Maximum OSCORE plaintext length (default 1024)
+- :kconfig:option:`CONFIG_COAP_OSCORE_EXCHANGE_CACHE_SIZE`: Number of OSCORE exchanges to track per service (default 8)
+- :kconfig:option:`CONFIG_COAP_OSCORE_EXCHANGE_LIFETIME_MS`: Lifetime of non-Observe OSCORE exchanges (default 60000ms)
+
 Configuration
 =============
 
@@ -91,17 +98,28 @@ service.
 When a service has an OSCORE context attached:
 
 1. **Incoming requests**: The server automatically verifies and decrypts OSCORE-protected
-   requests. Resource handlers receive decrypted CoAP messages with Inner options visible.
+   requests (RFC 8613 Section 8.2). Resource handlers receive decrypted CoAP messages
+   with Inner options visible.
 
-2. **Error handling**: OSCORE verification errors are sent as simple CoAP responses
-   **without** OSCORE processing (RFC 8613 Section 8.2):
+2. **Outgoing responses**: The server automatically OSCORE-protects responses and
+   notifications for OSCORE exchanges (RFC 8613 Section 8.3). This is done transparently:
+   - When an OSCORE request is successfully verified, the exchange is tracked
+   - All responses for that exchange (including Observe notifications) are OSCORE-protected
+   - Non-Observe exchanges are removed after sending the response
+   - Observe exchanges remain tracked until the observation is cancelled
 
-   - COSE decode failure → 4.02 Bad Option
-   - Security context not found → 4.01 Unauthorized
-   - Decryption failure → 4.00 Bad Request
+3. **Error handling**: OSCORE verification errors are sent as simple CoAP responses
+    **without** OSCORE processing (RFC 8613 Section 8.2):
+    - COSE decode failure → 4.02 Bad Option
+    - Security context not found → 4.01 Unauthorized
+    - Decryption failure → 4.00 Bad Request
 
-3. **Required OSCORE**: If ``require_oscore`` is true, unprotected requests are rejected
-   with 4.01 Unauthorized.
+4. **Required OSCORE**: If ``require_oscore`` is true, unprotected requests are rejected
+    with 4.01 Unauthorized.
+
+5. **Fail-closed behavior**: If OSCORE protection of a response fails for an OSCORE
+   exchange, the server will not fall back to sending a plaintext response. This ensures
+   security-first behavior per RFC 8613 Section 2.
 
 Client Usage
 ============

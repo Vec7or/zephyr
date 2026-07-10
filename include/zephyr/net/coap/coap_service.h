@@ -48,6 +48,18 @@ struct coap_oscore_context;
 
 /** @cond INTERNAL_HIDDEN */
 
+#if defined(CONFIG_COAP_OSCORE)
+/** OSCORE exchange entry for tracking which responses need OSCORE protection */
+struct coap_oscore_exchange {
+	struct net_sockaddr addr;          /**< Client address */
+	net_socklen_t addr_len;            /**< Address length */
+	uint8_t token[COAP_TOKEN_MAX_LEN]; /**< Token from the request */
+	uint8_t tkl;                       /**< Token length */
+	int64_t timestamp;                 /**< Creation timestamp */
+	bool is_observe;                   /**< True if this is an Observe exchange */
+};
+#endif
+
 struct coap_service_data {
 	int sock_fd;
 	struct coap_observer observers[CONFIG_COAP_SERVICE_OBSERVERS];
@@ -63,6 +75,7 @@ struct coap_service_data {
 	 * Requests without OSCORE will be rejected with 4.01 Unauthorized.
 	 */
 	bool require_oscore;
+	struct coap_oscore_exchange oscore_exchange_cache[CONFIG_COAP_OSCORE_EXCHANGE_CACHE_SIZE];
 #endif
 };
 

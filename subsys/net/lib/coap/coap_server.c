@@ -153,11 +153,30 @@ static int coap_service_remove_observer(const struct coap_service *service,
 	if (resource == NULL) {
 		COAP_SERVICE_FOREACH_RESOURCE(service, it) {
 			if (coap_remove_observer(it, obs)) {
+#if defined(CONFIG_COAP_OSCORE)
+				/* RFC 8613 Section 8.3/8.4: Remove OSCORE exchange when observer
+				 * removed */
+				if (service->data->oscore_ctx != NULL) {
+					net_socklen_t obs_addr_len = ADDRLEN(&obs->addr);
+					oscore_exchange_remove(service->data->oscore_exchange_cache,
+							       net_sad(&obs->addr), obs_addr_len,
+							       obs->token, obs->tkl);
+				}
+#endif
 				memset(obs, 0, sizeof(*obs));
 				return 1;
 			}
 		}
 	} else if (coap_remove_observer(resource, obs)) {
+#if defined(CONFIG_COAP_OSCORE)
+		/* RFC 8613 Section 8.3/8.4: Remove OSCORE exchange when observer removed */
+		if (service->data->oscore_ctx != NULL) {
+			net_socklen_t obs_addr_len = ADDRLEN(&obs->addr);
+			oscore_exchange_remove(service->data->oscore_exchange_cache,
+					       net_sad(&obs->addr), obs_addr_len,
+					       obs->token, obs->tkl);
+		}
+#endif
 		memset(obs, 0, sizeof(*obs));
 		return 1;
 	}
@@ -261,6 +280,19 @@ static int coap_server_process(int sock_fd)
 		}
 
 		LOG_DBG("OSCORE request verified and decrypted");
+
+		/* RFC 8613 Section 8.3: Track OSCORE exchanges to protect responses */
+		uint8_t token[COAP_TOKEN_MAX_LEN];
+		uint8_t tkl = coap_header_get_token(&request, token);
+		bool is_observe = coap_request_is_observe(&request);
+
+		ret = oscore_exchange_add(service->data->oscore_exchange_cache,
+					  net_sad(&client_addr), client_addr_len, token, tkl,
+					  is_observe);
+		if (ret < 0) {
+			LOG_WRN("Failed to add OSCORE exchange entry (%d)", ret);
+			/* Continue processing - this is not a fatal error */
+		}
 	} else if (service->data->oscore_ctx == NULL && coap_oscore_msg_has_oscore(&request)) {
 		/* OSCORE message received but no context configured */
 		LOG_WRN("OSCORE message received but no context configured");
@@ -701,6 +733,19 @@ int coap_service_send(const struct coap_service *service, const struct coap_pack
 {
 	int ret;
 
+	const uint8_t *send_data = cpkt->data;
+	size_t send_len = cpkt->offset;
+
+#if defined(CONFIG_COAP_OSCORE)
+	/* Buffer for OSCORE-protected message (worst-case overhead).
+	 * Static to avoid stack overflow for large message sizes.
+	 * Safe because function is protected by mutex.
+	 */
+	static uint8_t oscore_buf[CONFIG_COAP_SERVER_MESSAGE_SIZE + 128];
+	uint32_t oscore_len = sizeof(oscore_buf);
+	struct coap_oscore_exchange *exchange = NULL;
+#endif
+
 	if (!coap_service_in_section(service)) {
 		__ASSERT_NO_MSG(false);
 		return -EINVAL;
@@ -712,6 +757,37 @@ int coap_service_send(const struct coap_service *service, const struct coap_pack
 		(void)k_mutex_unlock(&lock);
 		return -EBADF;
 	}
+
+#if defined(CONFIG_COAP_OSCORE)
+	/* RFC 8613 Section 8.3: Protect responses for OSCORE exchanges */
+	if (service->data->oscore_ctx != NULL) {
+		uint8_t token[COAP_TOKEN_MAX_LEN];
+		uint8_t tkl = coap_header_get_token(cpkt, token);
+
+		/* Look up exchange to see if this response needs OSCORE protection */
+		exchange = oscore_exchange_find(service->data->oscore_exchange_cache, addr,
+						addr_len, token, tkl);
+		if (exchange != NULL) {
+			/* This response must be OSCORE-protected */
+			/* Protect the response */
+			ret = coap_oscore_protect(cpkt->data, cpkt->offset, oscore_buf, &oscore_len,
+						  service->data->oscore_ctx);
+			if (ret < 0) {
+				/* RFC 8613: Fail closed - do not send plaintext */
+				LOG_ERR("OSCORE protection failed (%d), not sending response", ret);
+				(void)k_mutex_unlock(&lock);
+				return ret;
+			}
+
+			/* Use protected message for sending */
+			send_data = oscore_buf;
+			send_len = oscore_len;
+
+			LOG_DBG("OSCORE protected response: %zu -> %zu bytes", cpkt->offset,
+				send_len);
+		}
+	}
+#endif
 
 	/*
 	 * Check if we should start with retransmits, if creating a pending message fails we still
@@ -733,13 +809,15 @@ int coap_service_send(const struct coap_service *service, const struct coap_pack
 		}
 
 		/* Replace tracked data with our allocated copy */
-		pending->data = coap_server_alloc(pending->len);
+		pending->data = coap_server_alloc(send_len);
 		if (pending->data == NULL) {
 			LOG_WRN("Failed to allocate pending message data for %s", service->name);
 			coap_pending_clear(pending);
 			goto send;
 		}
-		memcpy(pending->data, cpkt->data, pending->len);
+		/* Store the actual bytes to send (OSCORE-protected if applicable) */
+		memcpy(pending->data, send_data, send_len);
+		pending->len = send_len;
 
 		coap_pending_cycle(pending);
 
@@ -748,14 +826,25 @@ int coap_service_send(const struct coap_service *service, const struct coap_pack
 	}
 
 send:
+#if defined(CONFIG_COAP_OSCORE)
+	/* For non-Observe exchanges, remove entry after sending response */
+	if (exchange != NULL && !exchange->is_observe) {
+		uint8_t token[COAP_TOKEN_MAX_LEN];
+		uint8_t tkl = coap_header_get_token(cpkt, token);
+
+		oscore_exchange_remove(service->data->oscore_exchange_cache, addr, addr_len, token,
+				       tkl);
+	}
+#endif
+
 	(void)k_mutex_unlock(&lock);
 
-	ret = zsock_sendto(service->data->sock_fd, cpkt->data, cpkt->offset, 0, addr, addr_len);
+	ret = zsock_sendto(service->data->sock_fd, send_data, send_len, 0, addr, addr_len);
 	if (ret < 0) {
 		LOG_ERR("Failed to send CoAP message (%d)", ret);
 		return ret;
 	}
-	__ASSERT_NO_MSG(ret == cpkt->offset);
+	__ASSERT_NO_MSG(ret == (int)send_len);
 
 	return 0;
 }

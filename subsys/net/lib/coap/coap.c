@@ -27,6 +27,8 @@ LOG_MODULE_REGISTER(net_coap, CONFIG_COAP_LOG_LEVEL);
 #include <zephyr/net/coap/coap.h>
 #include <zephyr/net/coap/coap_mgmt.h>
 
+#include "coap_internal.h"
+
 #define COAP_PATH_ELEM_DELIM '/'
 #define COAP_PATH_ELEM_QUERY '?'
 #define COAP_PATH_ELEM_AMP   '&'
@@ -2031,8 +2033,7 @@ bool coap_remove_observer(struct coap_resource *resource,
 	return true;
 }
 
-static bool sockaddr_equal(const struct net_sockaddr *a,
-			   const struct net_sockaddr *b)
+bool coap_sockaddr_equal(const struct net_sockaddr *a, const struct net_sockaddr *b)
 {
 	/* FIXME: Should we consider ipv6-mapped ipv4 addresses as equal to
 	 * ipv4 addresses?
@@ -2079,9 +2080,8 @@ struct coap_observer *coap_find_observer(
 	for (size_t i = 0; i < len; i++) {
 		struct coap_observer *o = &observers[i];
 
-		if (o->tkl == token_len &&
-		    memcmp(o->token, token, token_len) == 0 &&
-		    sockaddr_equal(net_sad(&o->addr), addr)) {
+		if (o->tkl == token_len && memcmp(o->token, token, token_len) == 0 &&
+		    coap_sockaddr_equal(net_sad(&o->addr), addr)) {
 			return o;
 		}
 	}
@@ -2098,7 +2098,7 @@ struct coap_observer *coap_find_observer_by_addr(
 	for (i = 0; i < len; i++) {
 		struct coap_observer *o = &observers[i];
 
-		if (sockaddr_equal(net_sad(&o->addr), addr)) {
+		if (coap_sockaddr_equal(net_sad(&o->addr), addr)) {
 			return o;
 		}
 	}
