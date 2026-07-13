@@ -65,6 +65,18 @@ int coap_oscore_verify(const uint8_t *oscore_msg, uint32_t oscore_msg_len, uint8
 		       uint32_t *coap_msg_len, struct coap_oscore_context *ctx,
 		       uint8_t *error_code);
 
+
+/**
+ * @brief Wrapper for OSCORE verification (can be overridden in tests)
+ *
+ * This is a weak symbol that tests can override to inject test behavior.
+ * By default, it calls the real coap_oscore_verify implementation.
+ */
+int coap_oscore_verify_wrapper(const uint8_t *oscore_msg, uint32_t oscore_msg_len,
+				uint8_t *coap_msg, uint32_t *coap_msg_len,
+				struct coap_oscore_context *ctx, uint8_t *error_code);
+
+
 #endif /* CONFIG_COAP_OSCORE */
 
 #endif /* ZEPHYR_SUBSYS_NET_LIB_COAP_OSCORE_H_ */
