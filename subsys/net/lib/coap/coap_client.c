@@ -1111,6 +1111,288 @@ static bool find_echo_option(const struct coap_packet *response, struct coap_opt
 	return coap_find_options(response, COAP_OPTION_ECHO, option, 1);
 }
 
+#if defined(CONFIG_COAP_OSCORE)
+static bool handle_oscore_outer_block2(struct coap_client *client,
+					 const struct net_sockaddr *addr,
+					 net_socklen_t addrlen,
+					 const struct coap_packet *response,
+					 uint8_t response_type,
+					 struct coap_client_internal_request *internal_req,
+					 const uint8_t **oscore_msg_to_verify,
+					 uint32_t *oscore_msg_len,
+					 int *return_code)
+{
+	int ret;
+	int outer_block2 = coap_get_option_int(response, COAP_OPTION_BLOCK2);
+	bool has_more_blocks = (outer_block2 > 0) && GET_MORE(outer_block2);
+	int block_num = (outer_block2 > 0) ? GET_BLOCK_NUM(outer_block2) : 0;
+
+	/* RFC 8613 Section 8.4.1: Process Outer Block options according to RFC 7959 */
+	if (outer_block2 > 0) {
+		/* Initialize outer block context on first block */
+		if (block_num == 0) {
+			coap_block_transfer_init(&internal_req->oscore_outer_recv_blk_ctx,
+						 coap_client_default_block_size(), 0);
+			internal_req->oscore_outer_reassembly_len = 0;
+			internal_req->oscore_outer_header_len = 0;
+		}
+		/* Update block context from received block */
+		ret = coap_update_from_block(response,
+					     &internal_req->oscore_outer_recv_blk_ctx);
+		if (ret < 0) {
+			LOG_ERR("Error updating outer block context");
+			if (response_type == COAP_TYPE_CON) {
+				(void)send_ack(client->fd, addr, addrlen, response,
+					       COAP_CODE_EMPTY);
+			}
+			*return_code = 0;
+			return false;
+		}
+
+		/* Get payload to accumulate */
+		uint16_t payload_len;
+		const uint8_t *payload = coap_packet_get_payload(response, &payload_len);
+
+		/* RFC 8613 Section 4.1.3.4.2: Enforce MAX_UNFRAGMENTED_SIZE */
+		if (internal_req->oscore_outer_reassembly_len + payload_len >
+		    CONFIG_COAP_OSCORE_MAX_UNFRAGMENTED_SIZE) {
+			LOG_ERR("OSCORE outer block reassembly exceeds "
+				"MAX_UNFRAGMENTED_SIZE "
+				"(%zu + %u > %d), discarding per RFC 8613 Section "
+				"4.1.3.4.2",
+				internal_req->oscore_outer_reassembly_len, payload_len,
+				CONFIG_COAP_OSCORE_MAX_UNFRAGMENTED_SIZE);
+
+			/* Discard and clear state - fail closed */
+			internal_req->oscore_outer_reassembly_len = 0;
+			internal_req->oscore_outer_header_len = 0;
+
+			if (response_type == COAP_TYPE_CON) {
+				(void)send_ack(client->fd, addr, addrlen, response,
+					       COAP_CODE_EMPTY);
+			}
+
+			/* Do not call application callback - security violation */
+			*return_code = 0;
+			return false;
+		}
+
+		/* Accumulate payload at correct offset */
+		if (payload != NULL && payload_len > 0) {
+			size_t block_offset =
+				internal_req->oscore_outer_recv_blk_ctx.current;
+
+			memcpy(internal_req->oscore_outer_reassembly_buf + block_offset,
+			       payload, payload_len);
+			internal_req->oscore_outer_reassembly_len =
+				block_offset + payload_len;
+		}
+		/* Save header from first block (needed for reconstruction) */
+		if (block_num == 0) {
+			/* Save the complete first block message for later reconstruction.
+			 * We'll use it as a template and replace the payload.
+			 */
+			size_t msg_len = response->offset;
+
+			if (msg_len > sizeof(internal_req->oscore_outer_header_buf)) {
+				LOG_ERR("OSCORE outer message too large");
+				internal_req->oscore_outer_reassembly_len = 0;
+				internal_req->oscore_outer_header_len = 0;
+				if (response_type == COAP_TYPE_CON) {
+					(void)send_ack(client->fd, addr, addrlen, response,
+						       COAP_CODE_EMPTY);
+				}
+				*return_code = 0;
+				return false;
+			}
+
+			memcpy(internal_req->oscore_outer_header_buf, response->data,
+			       msg_len);
+			internal_req->oscore_outer_header_len = msg_len;
+		}
+		/* Advance to next block */
+		coap_next_block(response, &internal_req->oscore_outer_recv_blk_ctx);
+	}
+
+	if (has_more_blocks) {
+		/* RFC 8613 Section 8.4.1 + RFC 7959: Request next block.
+		 * Send ACK for CON, then send next block request.
+		 */
+		if (response_type == COAP_TYPE_CON) {
+			(void)send_ack(client->fd, addr, addrlen, response,
+				       COAP_CODE_EMPTY);
+			if (ret < 0) {
+				LOG_ERR("Failed to send ACK");
+				*return_code = ret;
+				return false;
+			}
+		}
+		/* RFC 7959: Build next block request using the same exchange.
+		 * Use 'reconstruct=true' to keep the same token and message ID.
+		 */
+		ret = coap_client_init_request(client, &internal_req->coap_request,
+					       internal_req, true);
+		if (ret < 0) {
+			LOG_ERR("Error creating next block request");
+			internal_req->oscore_outer_reassembly_len = 0;
+			internal_req->oscore_outer_header_len = 0;
+			*return_code = ret;
+			return false;
+		}
+
+		/* Append outer Block2 option for next block */
+		ret = coap_append_block2_option(&internal_req->request,
+						&internal_req->oscore_outer_recv_blk_ctx);
+		if (ret < 0) {
+			LOG_ERR("Failed to append outer block2 option");
+			internal_req->oscore_outer_reassembly_len = 0;
+			internal_req->oscore_outer_header_len = 0;
+			*return_code = ret;
+			return false;
+		}
+
+		/* Protect the next block request with OSCORE */
+		ret = oscore_protect_request(client, internal_req);
+		if (ret < 0) {
+			internal_req->oscore_outer_reassembly_len = 0;
+			internal_req->oscore_outer_header_len = 0;
+			*return_code = ret;
+			return false;
+		}
+
+		/* Send next block request */
+		struct coap_transmission_parameters params = internal_req->pending.params;
+
+		ret = coap_pending_init(&internal_req->pending,
+					&internal_req->request,
+					net_sad(&internal_req->addr), &params);
+		if (ret < 0) {
+			LOG_ERR("Error creating pending");
+			internal_req->oscore_outer_reassembly_len = 0;
+			internal_req->oscore_outer_header_len = 0;
+			*return_code = ret;
+			return false;
+		}
+		coap_pending_cycle(&internal_req->pending);
+
+		ret = send_request(client->fd, internal_req->request.data,
+				   internal_req->request.offset, 0,
+				   net_sad(&internal_req->addr), internal_req->addrlen);
+
+		if (ret < 0) {
+			LOG_ERR("Error sending next block request");
+			internal_req->oscore_outer_reassembly_len = 0;
+			internal_req->oscore_outer_header_len = 0;
+			*return_code = ret;
+			return false;
+		}
+
+		LOG_DBG("OSCORE outer Block2: buffered %zu bytes, requesting next block",
+			internal_req->oscore_outer_reassembly_len);
+		*return_code = 1;
+		return false;
+	}
+
+	/* Last block received. Reconstruct complete OSCORE message for verification. */
+	if (internal_req->oscore_outer_reassembly_len > 0) {
+		/* RFC 8613 Section 8.4.1: Reconstruct the complete OSCORE message.
+		 * The OSCORE payload (ciphertext) has been reassembled. Now we need
+		 * to build a complete CoAP message with the OSCORE option and the
+		 * reassembled payload, without the Block2/Size2 transport options.
+		 *
+		 * Note: Per RFC 8613, Block2/Size2 are "Outer" options that are not
+		 * part of the OSCORE-protected message. The OSCORE verification only
+		 * processes the OSCORE option and its payload. However, we still need
+		 * to provide a well-formed CoAP message structure.
+		 */
+		struct coap_packet template_pkt;
+
+		/* Parse the first block to extract header and OSCORE option */
+		ret = coap_packet_parse(&template_pkt,
+					internal_req->oscore_outer_header_buf,
+					internal_req->oscore_outer_header_len, NULL, 0);
+		if (ret < 0) {
+			LOG_ERR("Failed to parse first block template");
+			internal_req->oscore_outer_reassembly_len = 0;
+			internal_req->oscore_outer_header_len = 0;
+			*return_code = 0;
+			return false;
+		}
+
+		/* Find where the payload starts in the template */
+		uint16_t template_payload_len;
+		const uint8_t *template_payload =
+			coap_packet_get_payload(&template_pkt, &template_payload_len);
+		size_t header_and_options_len;
+
+		if (template_payload != NULL) {
+			/* Calculate length up to (but not including) payload marker */
+			header_and_options_len =
+				template_payload - internal_req->oscore_outer_header_buf - 1;
+		} else {
+			/* No payload marker in template, shouldn't happen but handle it */
+			header_and_options_len =
+				template_pkt.hdr_len + template_pkt.opt_len;
+		}
+
+		/* Build reconstructed message: header + options + reassembled payload.
+		 * Note: This includes Block2/Size2 options from the first block,
+		 * which is acceptable since Block2/Size2 are Class U Outer options
+		 * (RFC 8613 Section 4.1.2) and are not covered by the AEAD
+		 * (Section 4.1.3.4.2), so including them does not affect verification.
+		 */
+		size_t recon_len = 0;
+
+		/* Copy header and all options from first block */
+		if (header_and_options_len > sizeof(internal_req->oscore_wire_buf)) {
+			LOG_ERR("OSCORE header+options too large");
+			internal_req->oscore_outer_reassembly_len = 0;
+			internal_req->oscore_outer_header_len = 0;
+			*return_code = 0;
+			return false;
+		}
+
+		memcpy(internal_req->oscore_wire_buf, internal_req->oscore_outer_header_buf,
+		       header_and_options_len);
+		recon_len = header_and_options_len;
+
+		/* Add payload marker and complete reassembled payload */
+		if (recon_len + 1 + internal_req->oscore_outer_reassembly_len >
+		    sizeof(internal_req->oscore_wire_buf)) {
+			LOG_ERR("Reconstructed OSCORE message too large");
+			internal_req->oscore_outer_reassembly_len = 0;
+			internal_req->oscore_outer_header_len = 0;
+			*return_code = 0;
+			return false;
+		}
+
+		internal_req->oscore_wire_buf[recon_len++] = 0xFF; /* Payload marker */
+		memcpy(internal_req->oscore_wire_buf + recon_len,
+		       internal_req->oscore_outer_reassembly_buf,
+		       internal_req->oscore_outer_reassembly_len);
+		recon_len += internal_req->oscore_outer_reassembly_len;
+
+		*oscore_msg_to_verify = internal_req->oscore_wire_buf;
+		*oscore_msg_len = recon_len;
+
+		LOG_DBG("OSCORE outer Block2: reconstructed %u bytes from %zu payload "
+			"bytes",
+			*oscore_msg_len, internal_req->oscore_outer_reassembly_len);
+
+		/* Clear reassembly state */
+		internal_req->oscore_outer_reassembly_len = 0;
+		internal_req->oscore_outer_header_len = 0;
+	} else {
+		/* No outer block-wise, verify response as-is */
+		*oscore_msg_to_verify = response->data;
+		*oscore_msg_len = response->offset;
+	}
+
+	*return_code = 0;
+	return true;
+}
+#endif
+
 static int handle_response(struct coap_client *client, const struct net_sockaddr *addr,
 			   net_socklen_t addrlen, const struct coap_packet *response,
 			   bool response_truncated)
@@ -1198,6 +1480,8 @@ static int handle_response(struct coap_client *client, const struct net_sockaddr
 	 */
 	if (internal_req->oscore_enabled_for_exchange) {
 		bool response_has_oscore = coap_oscore_msg_has_oscore(response);
+		const uint8_t *oscore_msg_to_verify;
+		uint32_t oscore_msg_len;
 
 		if (!response_has_oscore) {
 			/* RFC 8613 Section 8.4: Client SHALL stop processing the response
@@ -1228,262 +1512,14 @@ static int handle_response(struct coap_client *client, const struct net_sockaddr
 			return 0;
 		}
 
-		/* RFC 8613 Section 8.4.1: If Block-wise is present, reassemble outer blocks
-		 * before OSCORE verification. Check for Block2 in the outer message.
+		/* RFC 8613 Section 8.4.1: If Block-wise is present, reassemble outer
+		 * blocks before OSCORE verification.
 		 */
-		int outer_block2 = coap_get_option_int(response, COAP_OPTION_BLOCK2);
-		bool has_more_blocks = (outer_block2 > 0) && GET_MORE(outer_block2);
-
-		int block_num = (outer_block2 > 0) ? GET_BLOCK_NUM(outer_block2) : 0;
-
-		/* RFC 8613 Section 8.4.1: Process Outer Block options according to RFC 7959 */
-		if (outer_block2 > 0) {
-			/* Initialize outer block context on first block */
-			if (block_num == 0) {
-				coap_block_transfer_init(&internal_req->oscore_outer_recv_blk_ctx,
-							 coap_client_default_block_size(), 0);
-				internal_req->oscore_outer_reassembly_len = 0;
-				internal_req->oscore_outer_header_len = 0;
-			}
-			/* Update block context from received block */
-			ret = coap_update_from_block(response,
-						     &internal_req->oscore_outer_recv_blk_ctx);
-			if (ret < 0) {
-				LOG_ERR("Error updating outer block context");
-				if (response_type == COAP_TYPE_CON) {
-					(void)send_ack(client->fd, addr, addrlen, response,
-						       COAP_CODE_EMPTY);
-				}
-				return 0;
-			}
-
-			/* Get payload to accumulate */
-			uint16_t payload_len;
-			const uint8_t *payload = coap_packet_get_payload(response, &payload_len);
-
-			/* RFC 8613 Section 4.1.3.4.2: Enforce MAX_UNFRAGMENTED_SIZE */
-			if (internal_req->oscore_outer_reassembly_len + payload_len >
-			    CONFIG_COAP_OSCORE_MAX_UNFRAGMENTED_SIZE) {
-				LOG_ERR("OSCORE outer block reassembly exceeds "
-					"MAX_UNFRAGMENTED_SIZE "
-					"(%zu + %u > %d), discarding per RFC 8613 Section "
-					"4.1.3.4.2",
-					internal_req->oscore_outer_reassembly_len, payload_len,
-					CONFIG_COAP_OSCORE_MAX_UNFRAGMENTED_SIZE);
-
-				/* Discard and clear state - fail closed */
-				internal_req->oscore_outer_reassembly_len = 0;
-				internal_req->oscore_outer_header_len = 0;
-
-				if (response_type == COAP_TYPE_CON) {
-					(void)send_ack(client->fd, addr, addrlen, response,
-						       COAP_CODE_EMPTY);
-				}
-
-				/* Do not call application callback - security violation */
-				return 0;
-			}
-
-			/* Accumulate payload at correct offset */
-			if (payload != NULL && payload_len > 0) {
-				size_t block_offset =
-					internal_req->oscore_outer_recv_blk_ctx.current;
-
-				memcpy(internal_req->oscore_outer_reassembly_buf + block_offset,
-				       payload, payload_len);
-				internal_req->oscore_outer_reassembly_len =
-					block_offset + payload_len;
-			}
-			/* Save header from first block (needed for reconstruction) */
-			if (block_num == 0) {
-				/* Save the complete first block message for later reconstruction.
-				 * We'll use it as a template and replace the payload.
-				 */
-				size_t msg_len = response->offset;
-
-				if (msg_len > sizeof(internal_req->oscore_outer_header_buf)) {
-					LOG_ERR("OSCORE outer message too large");
-					internal_req->oscore_outer_reassembly_len = 0;
-					internal_req->oscore_outer_header_len = 0;
-					if (response_type == COAP_TYPE_CON) {
-						(void)send_ack(client->fd, addr, addrlen, response,
-							       COAP_CODE_EMPTY);
-					}
-					return 0;
-				}
-
-				memcpy(internal_req->oscore_outer_header_buf, response->data,
-				       msg_len);
-				internal_req->oscore_outer_header_len = msg_len;
-			}
-			/* Advance to next block */
-			coap_next_block(response, &internal_req->oscore_outer_recv_blk_ctx);
-		}
-
-		if (has_more_blocks) {
-			/* RFC 8613 Section 8.4.1 + RFC 7959: Request next block.
-			 * Send ACK for CON, then send next block request.
-			 */
-			if (response_type == COAP_TYPE_CON) {
-				(void)send_ack(client->fd, addr, addrlen, response,
-					       COAP_CODE_EMPTY);
-				if (ret < 0) {
-					LOG_ERR("Failed to send ACK");
-					return ret;
-				}
-			}
-			/* RFC 7959: Build next block request using the same exchange.
-			 * Use 'reconstruct=true' to keep the same token and message ID.
-			 */
-			ret = coap_client_init_request(client, &internal_req->coap_request,
-						       internal_req, true);
-			if (ret < 0) {
-				LOG_ERR("Error creating next block request");
-				internal_req->oscore_outer_reassembly_len = 0;
-				internal_req->oscore_outer_header_len = 0;
-				return ret;
-			}
-
-			/* Append outer Block2 option for next block */
-			ret = coap_append_block2_option(&internal_req->request,
-							&internal_req->oscore_outer_recv_blk_ctx);
-			if (ret < 0) {
-				LOG_ERR("Failed to append outer block2 option");
-				internal_req->oscore_outer_reassembly_len = 0;
-				internal_req->oscore_outer_header_len = 0;
-				return ret;
-			}
-
-			/* Protect the next block request with OSCORE */
-			ret = oscore_protect_request(client, internal_req);
-			if (ret < 0) {
-				internal_req->oscore_outer_reassembly_len = 0;
-				internal_req->oscore_outer_header_len = 0;
-				return ret;
-			}
-
-			/* Send next block request */
-			struct coap_transmission_parameters params = internal_req->pending.params;
-
-			ret = coap_pending_init(&internal_req->pending,
-						&internal_req->request,
-						net_sad(&internal_req->addr), &params);
-			if (ret < 0) {
-				LOG_ERR("Error creating pending");
-				internal_req->oscore_outer_reassembly_len = 0;
-				internal_req->oscore_outer_header_len = 0;
-				return ret;
-			}
-			coap_pending_cycle(&internal_req->pending);
-
-			ret = send_request(client->fd, internal_req->request.data,
-					   internal_req->request.offset, 0,
-					   net_sad(&internal_req->addr), internal_req->addrlen);
-
-			if (ret < 0) {
-				LOG_ERR("Error sending next block request");
-				internal_req->oscore_outer_reassembly_len = 0;
-				internal_req->oscore_outer_header_len = 0;
-				return ret;
-			}
-
-			LOG_DBG("OSCORE outer Block2: buffered %zu bytes, requesting next block",
-				internal_req->oscore_outer_reassembly_len);
-			return 1;
-		}
-		/* Last block received. Reconstruct complete OSCORE message for verification. */
-		const uint8_t *oscore_msg_to_verify;
-		uint32_t oscore_msg_len;
-
-		if (internal_req->oscore_outer_reassembly_len > 0) {
-			/* RFC 8613 Section 8.4.1: Reconstruct the complete OSCORE message.
-			 * The OSCORE payload (ciphertext) has been reassembled. Now we need
-			 * to build a complete CoAP message with the OSCORE option and the
-			 * reassembled payload, without the Block2/Size2 transport options.
-			 *
-			 * Note: Per RFC 8613, Block2/Size2 are "Outer" options that are not
-			 * part of the OSCORE-protected message. The OSCORE verification only
-			 * processes the OSCORE option and its payload. However, we still need
-			 * to provide a well-formed CoAP message structure.
-			 */
-			struct coap_packet template_pkt;
-
-			/* Parse the first block to extract header and OSCORE option */
-			ret = coap_packet_parse(&template_pkt,
-						internal_req->oscore_outer_header_buf,
-						internal_req->oscore_outer_header_len, NULL, 0);
-			if (ret < 0) {
-				LOG_ERR("Failed to parse first block template");
-				internal_req->oscore_outer_reassembly_len = 0;
-				internal_req->oscore_outer_header_len = 0;
-				return 0;
-			}
-
-			/* Find where the payload starts in the template */
-			uint16_t template_payload_len;
-			const uint8_t *template_payload =
-				coap_packet_get_payload(&template_pkt, &template_payload_len);
-			size_t header_and_options_len;
-
-			if (template_payload != NULL) {
-				/* Calculate length up to (but not including) payload marker */
-				header_and_options_len = template_payload -
-							 internal_req->oscore_outer_header_buf - 1;
-			} else {
-				/* No payload marker in template, shouldn't happen but handle it */
-				header_and_options_len =
-					template_pkt.hdr_len + template_pkt.opt_len;
-			}
-
-			/* Build reconstructed message: header + options + reassembled payload.
-			 * Note: This includes Block2/Size2 options from the first block,
-			 * which is acceptable since Block2/Size2 are Class U Outer options
-			 * (RFC 8613 Section 4.1.2) and are not covered by the AEAD
-			 * (Section 4.1.3.4.2), so including them does not affect verification.
-			 */
-			size_t recon_len = 0;
-
-			/* Copy header and all options from first block */
-			if (header_and_options_len > sizeof(internal_req->oscore_wire_buf)) {
-				LOG_ERR("OSCORE header+options too large");
-				internal_req->oscore_outer_reassembly_len = 0;
-				internal_req->oscore_outer_header_len = 0;
-				return 0;
-			}
-
-			memcpy(internal_req->oscore_wire_buf, internal_req->oscore_outer_header_buf,
-			       header_and_options_len);
-			recon_len = header_and_options_len;
-
-			/* Add payload marker and complete reassembled payload */
-			if (recon_len + 1 + internal_req->oscore_outer_reassembly_len >
-			    sizeof(internal_req->oscore_wire_buf)) {
-				LOG_ERR("Reconstructed OSCORE message too large");
-				internal_req->oscore_outer_reassembly_len = 0;
-				internal_req->oscore_outer_header_len = 0;
-				return 0;
-			}
-
-			internal_req->oscore_wire_buf[recon_len++] = 0xFF; /* Payload marker */
-			memcpy(internal_req->oscore_wire_buf + recon_len,
-			       internal_req->oscore_outer_reassembly_buf,
-			       internal_req->oscore_outer_reassembly_len);
-			recon_len += internal_req->oscore_outer_reassembly_len;
-
-			oscore_msg_to_verify = internal_req->oscore_wire_buf;
-			oscore_msg_len = recon_len;
-
-			LOG_DBG("OSCORE outer Block2: reconstructed %u bytes from %zu payload "
-				"bytes",
-				oscore_msg_len, internal_req->oscore_outer_reassembly_len);
-
-			/* Clear reassembly state */
-			internal_req->oscore_outer_reassembly_len = 0;
-			internal_req->oscore_outer_header_len = 0;
-		} else {
-			/* No outer block-wise, verify response as-is */
-			oscore_msg_to_verify = response->data;
-			oscore_msg_len = response->offset;
+		if (!handle_oscore_outer_block2(client, addr, addrlen, response,
+					       response_type, internal_req,
+					       &oscore_msg_to_verify,
+					       &oscore_msg_len, &ret)) {
+			return ret;
 		}
 
 		/* Verify and decrypt the response */

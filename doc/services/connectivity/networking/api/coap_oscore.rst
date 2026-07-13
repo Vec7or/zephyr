@@ -31,6 +31,7 @@ Additional OSCORE configuration options:
 - :kconfig:option:`CONFIG_COAP_OSCORE_MAX_PLAINTEXT_LEN`: Maximum OSCORE plaintext length (default 1024)
 - :kconfig:option:`CONFIG_COAP_OSCORE_EXCHANGE_CACHE_SIZE`: Number of OSCORE exchanges to track per service (default 8)
 - :kconfig:option:`CONFIG_COAP_OSCORE_EXCHANGE_LIFETIME_MS`: Lifetime of non-Observe OSCORE exchanges (default 60000ms)
+- :kconfig:option:`CONFIG_COAP_OSCORE_MAX_UNFRAGMENTED_SIZE`: Maximum size of unfragmented OSCORE messages (default 4096)
 
 Configuration
 =============
@@ -161,9 +162,7 @@ When a client has an OSCORE context attached:
    the client follows RFC 8613 Section 8.4.1 ordering requirements:
 
    - For Block2 (download): The client buffers outer block payloads and performs OSCORE
-     verification after receiving the last block. Note: Current implementation verifies
-     only the last block's OSCORE message, which works with most servers but may not
-     handle all Block2 + OSCORE combinations per RFC 8613 Section 8.4.1.
+     verification after receiving the last block.
    - For Block1 (upload): Block-wise upload with OSCORE is handled by the existing
      blockwise logic operating on OSCORE-protected messages
  
