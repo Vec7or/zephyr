@@ -11,8 +11,7 @@ LOG_MODULE_DECLARE(net_coap_service_sample);
 #include <zephyr/sys/printk.h>
 #include <zephyr/net/coap/coap_service.h>
 
-static int separate_get(struct coap_resource *resource,
-			struct coap_packet *request,
+static int separate_get(struct coap_resource *resource, struct coap_packet *request,
 			struct sockaddr *addr, socklen_t addr_len)
 {
 	uint8_t data[CONFIG_COAP_SERVER_MESSAGE_SIZE];
@@ -55,8 +54,7 @@ static int separate_get(struct coap_resource *resource,
 	}
 
 	/* Re-use the buffer */
-	r = coap_packet_init(&response, data, sizeof(data),
-			     COAP_VERSION_1, type, tkl, token,
+	r = coap_packet_init(&response, data, sizeof(data), COAP_VERSION_1, type, tkl, token,
 			     COAP_RESPONSE_CODE_CONTENT, coap_next_id());
 	if (r < 0) {
 		return r;
@@ -74,14 +72,13 @@ static int separate_get(struct coap_resource *resource,
 	}
 
 	/* The response that coap-client expects */
-	r = snprintk((char *) payload, sizeof(payload),
-		     "Type: %u\nCode: %u\nMID: %u\n", type, code, id);
+	r = snprintk((char *)payload, sizeof(payload), "Type: %u\nCode: %u\nMID: %u\n", type, code,
+		     id);
 	if (r < 0) {
 		return r;
 	}
 
-	r = coap_packet_append_payload(&response, (uint8_t *)payload,
-				       strlen(payload));
+	r = coap_packet_append_payload(&response, (uint8_t *)payload, strlen(payload));
 	if (r < 0) {
 		return r;
 	}
@@ -91,9 +88,11 @@ static int separate_get(struct coap_resource *resource,
 	return r;
 }
 
-static const char * const separate_path[] = { "separate", NULL };
+static const char *const separate_path[] = {"separate", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(separate, coap_server,
-{
-	.get = separate_get,
-	.path = separate_path,
-});
+			{
+				.get = separate_get,
+				.path = separate_path,
+			});
+/* clang-format on */

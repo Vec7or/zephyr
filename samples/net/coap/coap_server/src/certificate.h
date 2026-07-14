@@ -8,7 +8,7 @@
 #define __CERTIFICATE_H__
 
 #define SERVER_CERTIFICATE_TAG 1
-#define PSK_TAG 2
+#define PSK_TAG                2
 
 #if !defined(CONFIG_NET_SAMPLE_CERTS_WITH_SC)
 static const unsigned char server_certificate[] = {

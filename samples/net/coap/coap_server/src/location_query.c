@@ -11,15 +11,12 @@ LOG_MODULE_DECLARE(net_coap_service_sample);
 #include <zephyr/sys/printk.h>
 #include <zephyr/net/coap/coap_service.h>
 
-static int location_query_post(struct coap_resource *resource,
-			       struct coap_packet *request,
+static int location_query_post(struct coap_resource *resource, struct coap_packet *request,
 			       struct sockaddr *addr, socklen_t addr_len)
 {
-	static const char *const location_query[] = { "first=1",
-						      "second=2",
-						      NULL };
+	static const char *const location_query[] = {"first=1", "second=2", NULL};
 	uint8_t data[CONFIG_COAP_SERVER_MESSAGE_SIZE];
-	const char * const *p;
+	const char *const *p;
 	struct coap_packet response;
 	uint8_t token[COAP_TOKEN_MAX_LEN];
 	uint16_t id;
@@ -43,17 +40,15 @@ static int location_query_post(struct coap_resource *resource,
 		type = COAP_TYPE_NON_CON;
 	}
 
-	r = coap_packet_init(&response, data, sizeof(data),
-			     COAP_VERSION_1, type, tkl, token,
+	r = coap_packet_init(&response, data, sizeof(data), COAP_VERSION_1, type, tkl, token,
 			     COAP_RESPONSE_CODE_CREATED, id);
 	if (r < 0) {
 		return r;
 	}
 
 	for (p = location_query; *p; p++) {
-		r = coap_packet_append_option(&response,
-					      COAP_OPTION_LOCATION_QUERY,
-					      *p, strlen(*p));
+		r = coap_packet_append_option(&response, COAP_OPTION_LOCATION_QUERY, *p,
+					      strlen(*p));
 		if (r < 0) {
 			return r;
 		}
@@ -64,9 +59,11 @@ static int location_query_post(struct coap_resource *resource,
 	return r;
 }
 
-static const char * const location_query_path[] = { "location-query", NULL };
+static const char *const location_query_path[] = {"location-query", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(location_query, coap_server,
-{
-	.post = location_query_post,
-	.path = location_query_path,
-});
+			{
+				.post = location_query_post,
+				.path = location_query_path,
+			});
+/* clang-format on */

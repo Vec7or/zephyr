@@ -37,7 +37,7 @@ extern "C" {
  */
 
 /** Start the service on boot. */
-#define COAP_SERVICE_AUTOSTART		BIT(0)
+#define COAP_SERVICE_AUTOSTART BIT(0)
 
 /** @} */
 
@@ -64,28 +64,23 @@ struct coap_service {
 };
 
 #if defined(CONFIG_NET_SOCKETS_ENABLE_DTLS)
-#define __z_coap_service_secure(_sec_tag_list, _sec_tag_list_size)				\
-		.sec_tag_list = _sec_tag_list,							\
-		.sec_tag_list_size = _sec_tag_list_size,
+#define __z_coap_service_secure(_sec_tag_list, _sec_tag_list_size)                                 \
+	.sec_tag_list = _sec_tag_list, .sec_tag_list_size = _sec_tag_list_size,
 #else
 #define __z_coap_service_secure(...)
 #endif
 
-#define __z_coap_service_define(_name, _host, _port, _flags, _res_begin, _res_end,		\
-				_sec_tag_list, _sec_tag_list_size)				\
-	static struct coap_service_data _CONCAT(coap_service_data_, _name) = {			\
-		.sock_fd = -1,									\
-	};											\
-	const STRUCT_SECTION_ITERABLE(coap_service, _name) = {					\
-		.name = STRINGIFY(_name),							\
-		.host = _host,									\
-		.port = (uint16_t *)(_port),							\
-		.flags = _flags,								\
-		.res_begin = (_res_begin),							\
-		.res_end = (_res_end),								\
-		.data = &_CONCAT(coap_service_data_, _name),					\
-		__z_coap_service_secure(_sec_tag_list, _sec_tag_list_size)			\
-	}
+#define __z_coap_service_define(_name, _host, _port, _flags, _res_begin, _res_end, _sec_tag_list,  \
+				_sec_tag_list_size)                                                \
+	static struct coap_service_data _CONCAT(coap_service_data_, _name) = {                     \
+		.sock_fd = -1,                                                                     \
+	};                                                                                         \
+	const STRUCT_SECTION_ITERABLE(coap_service, _name) = {                                     \
+		.name = STRINGIFY(_name), .host = _host, .port = (uint16_t *)(_port),              \
+				  .flags = _flags, .res_begin = (_res_begin),                      \
+				  .res_end = (_res_end),                                           \
+				  .data = &_CONCAT(coap_service_data_, _name),                     \
+				  __z_coap_service_secure(_sec_tag_list, _sec_tag_list_size)}
 
 /** @endcond */
 
@@ -125,8 +120,8 @@ struct coap_service {
  * @param _name Name of the resource.
  * @param _service Name of the associated service.
  */
-#define COAP_RESOURCE_DEFINE(_name, _service, ...)						\
-	STRUCT_SECTION_ITERABLE_ALTERNATE(_CONCAT(coap_resource_, _service), coap_resource,	\
+#define COAP_RESOURCE_DEFINE(_name, _service, ...)                                                 \
+	STRUCT_SECTION_ITERABLE_ALTERNATE(_CONCAT(coap_resource_, _service), coap_resource,        \
 					  _name) = __VA_ARGS__
 
 /**
@@ -146,13 +141,12 @@ struct coap_service {
  * @param[inout] _port Pointer to port associated with the service.
  * @param _flags Configuration flags @see @ref COAP_SERVICE_FLAGS.
  */
-#define COAP_SERVICE_DEFINE(_name, _host, _port, _flags)					\
-	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[];	\
-	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[];	\
-	__z_coap_service_define(_name, _host, _port, _flags,					\
-				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[0],	\
-				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[0],	\
-				NULL, 0)
+#define COAP_SERVICE_DEFINE(_name, _host, _port, _flags)                                           \
+	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[];       \
+	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[];         \
+	__z_coap_service_define(_name, _host, _port, _flags,                                       \
+				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[0],         \
+				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[0], NULL, 0)
 
 /**
  * @brief Define a CoAP secure service with static resources.
@@ -175,14 +169,14 @@ struct coap_service {
  * @param _sec_tag_list DTLS security tag list used to setup a COAPS socket.
  * @param _sec_tag_list_size DTLS security tag list size used to setup a COAPS socket.
  */
-#define COAPS_SERVICE_DEFINE(_name, _host, _port, _flags, _sec_tag_list, _sec_tag_list_size)	\
-	BUILD_ASSERT(IS_ENABLED(CONFIG_NET_SOCKETS_ENABLE_DTLS),				\
-		     "DTLS is required for CoAP secure (CONFIG_NET_SOCKETS_ENABLE_DTLS)");	\
-	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[];	\
-	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[];	\
-	__z_coap_service_define(_name, _host, _port, _flags,					\
-				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[0],	\
-				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[0],	\
+#define COAPS_SERVICE_DEFINE(_name, _host, _port, _flags, _sec_tag_list, _sec_tag_list_size)       \
+	BUILD_ASSERT(IS_ENABLED(CONFIG_NET_SOCKETS_ENABLE_DTLS),                                   \
+		     "DTLS is required for CoAP secure (CONFIG_NET_SOCKETS_ENABLE_DTLS)");         \
+	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[];       \
+	extern struct coap_resource _CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[];         \
+	__z_coap_service_define(_name, _host, _port, _flags,                                       \
+				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_start)[0],         \
+				&_CONCAT(_CONCAT(_coap_resource_, _name), _list_end)[0],           \
 				_sec_tag_list, _sec_tag_list_size)
 
 /**
@@ -205,7 +199,7 @@ struct coap_service {
  * @param _service Pointer to a service.
  * @param _resource Pointer to a resource.
  */
-#define COAP_SERVICE_HAS_RESOURCE(_service, _resource)						\
+#define COAP_SERVICE_HAS_RESOURCE(_service, _resource)                                             \
 	((_service)->res_begin <= _resource && _resource < (_service)->res_end)
 
 /**
@@ -223,7 +217,7 @@ struct coap_service {
  * @param _service Name of CoAP service
  * @param _it Name of iterator (of type @ref coap_resource)
  */
-#define COAP_RESOURCE_FOREACH(_service, _it)							\
+#define COAP_RESOURCE_FOREACH(_service, _it)                                                       \
 	STRUCT_SECTION_FOREACH_ALTERNATE(_CONCAT(coap_resource_, _service), coap_resource, _it)
 
 /**
@@ -234,11 +228,12 @@ struct coap_service {
  * @param _service Pointer to COAP service
  * @param _it Name of iterator (of type @ref coap_resource)
  */
-#define COAP_SERVICE_FOREACH_RESOURCE(_service, _it)						\
-	for (struct coap_resource *_it = (_service)->res_begin; ({				\
-		__ASSERT(_it <= (_service)->res_end, "unexpected list end location");		\
-		_it < (_service)->res_end;							\
-	}); _it++)
+#define COAP_SERVICE_FOREACH_RESOURCE(_service, _it)                                               \
+	for (struct coap_resource *_it = (_service)->res_begin; ({                                 \
+		     __ASSERT(_it <= (_service)->res_end, "unexpected list end location");         \
+		     _it < (_service)->res_end;                                                    \
+	     });                                                                                   \
+	     _it++)
 
 /**
  * @brief Start the provided @p service .
@@ -345,8 +340,8 @@ int coap_resource_remove_observer_by_addr(struct coap_resource *resource,
  * @param token_len Length of valid bytes in the token
  * @return 0 in case of success or negative in case of error.
  */
-int coap_resource_remove_observer_by_token(struct coap_resource *resource,
-					   const uint8_t *token, uint8_t token_len);
+int coap_resource_remove_observer_by_token(struct coap_resource *resource, const uint8_t *token,
+					   uint8_t token_len);
 
 /**
  * @}

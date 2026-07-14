@@ -27,8 +27,7 @@ extern "C" {
  * included in the responses of the .well-known/core resource if is to be used with
  * coap_well_known_core_get.
  */
-#define COAP_WELL_KNOWN_CORE_PATH \
-	((const char * const[]) { ".well-known", "core", NULL })
+#define COAP_WELL_KNOWN_CORE_PATH ((const char *const[]){".well-known", "core", NULL})
 
 /**
  * @brief Build a CoAP response for a .well-known/core CoAP request.
@@ -41,10 +40,8 @@ extern "C" {
  *
  * @return 0 in case of success or negative in case of error.
  */
-int coap_well_known_core_get(struct coap_resource *resource,
-			     const struct coap_packet *request,
-			     struct coap_packet *response,
-			     uint8_t *data, uint16_t data_len);
+int coap_well_known_core_get(struct coap_resource *resource, const struct coap_packet *request,
+			     struct coap_packet *response, uint8_t *data, uint16_t data_len);
 
 /**
  * @brief Build a CoAP response for a .well-known/core CoAP request.
@@ -58,10 +55,8 @@ int coap_well_known_core_get(struct coap_resource *resource,
  *
  * @return 0 in case of success or negative in case of error.
  */
-int coap_well_known_core_get_len(struct coap_resource *resources,
-				 size_t resources_len,
-				 const struct coap_packet *request,
-				 struct coap_packet *response,
+int coap_well_known_core_get_len(struct coap_resource *resources, size_t resources_len,
+				 const struct coap_packet *request, struct coap_packet *response,
 				 uint8_t *data, uint16_t data_len);
 
 /**
@@ -71,7 +66,7 @@ int coap_well_known_core_get_len(struct coap_resource *resources,
  */
 struct coap_core_metadata {
 	/** List of attributes to add */
-	const char * const *attributes;
+	const char *const *attributes;
 	/** User specific data */
 	void *user_data;
 };

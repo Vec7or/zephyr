@@ -13,8 +13,7 @@ LOG_MODULE_DECLARE(net_coap_service_sample);
 
 #include "net_private.h"
 
-static int piggyback_get(struct coap_resource *resource,
-			 struct coap_packet *request,
+static int piggyback_get(struct coap_resource *resource, struct coap_packet *request,
 			 struct sockaddr *addr, socklen_t addr_len)
 {
 	uint8_t data[CONFIG_COAP_SERVER_MESSAGE_SIZE];
@@ -42,8 +41,7 @@ static int piggyback_get(struct coap_resource *resource,
 		type = COAP_TYPE_NON_CON;
 	}
 
-	r = coap_packet_init(&response, data, sizeof(data),
-			     COAP_VERSION_1, type, tkl, token,
+	r = coap_packet_init(&response, data, sizeof(data), COAP_VERSION_1, type, tkl, token,
 			     COAP_RESPONSE_CODE_CONTENT, id);
 	if (r < 0) {
 		return r;
@@ -61,14 +59,13 @@ static int piggyback_get(struct coap_resource *resource,
 	}
 
 	/* The response that coap-client expects */
-	r = snprintk((char *) payload, sizeof(payload),
-		     "Type: %u\nCode: %u\nMID: %u\n", type, code, id);
+	r = snprintk((char *)payload, sizeof(payload), "Type: %u\nCode: %u\nMID: %u\n", type, code,
+		     id);
 	if (r < 0) {
 		return r;
 	}
 
-	r = coap_packet_append_payload(&response, (uint8_t *)payload,
-				       strlen(payload));
+	r = coap_packet_append_payload(&response, (uint8_t *)payload, strlen(payload));
 	if (r < 0) {
 		return r;
 	}
@@ -78,8 +75,7 @@ static int piggyback_get(struct coap_resource *resource,
 	return r;
 }
 
-static int test_del(struct coap_resource *resource,
-		    struct coap_packet *request,
+static int test_del(struct coap_resource *resource, struct coap_packet *request,
 		    struct sockaddr *addr, socklen_t addr_len)
 {
 	uint8_t data[CONFIG_COAP_SERVER_MESSAGE_SIZE];
@@ -106,8 +102,7 @@ static int test_del(struct coap_resource *resource,
 		type = COAP_TYPE_NON_CON;
 	}
 
-	r = coap_packet_init(&response, data, sizeof(data),
-			     COAP_VERSION_1, type, tkl, token,
+	r = coap_packet_init(&response, data, sizeof(data), COAP_VERSION_1, type, tkl, token,
 			     COAP_RESPONSE_CODE_DELETED, id);
 	if (r < 0) {
 		return r;
@@ -118,8 +113,7 @@ static int test_del(struct coap_resource *resource,
 	return r;
 }
 
-static int test_put(struct coap_resource *resource,
-		    struct coap_packet *request,
+static int test_put(struct coap_resource *resource, struct coap_packet *request,
 		    struct sockaddr *addr, socklen_t addr_len)
 {
 	uint8_t data[CONFIG_COAP_SERVER_MESSAGE_SIZE];
@@ -153,8 +147,7 @@ static int test_put(struct coap_resource *resource,
 		type = COAP_TYPE_NON_CON;
 	}
 
-	r = coap_packet_init(&response, data, sizeof(data),
-			     COAP_VERSION_1, type, tkl, token,
+	r = coap_packet_init(&response, data, sizeof(data), COAP_VERSION_1, type, tkl, token,
 			     COAP_RESPONSE_CODE_CHANGED, id);
 	if (r < 0) {
 		return r;
@@ -165,16 +158,12 @@ static int test_put(struct coap_resource *resource,
 	return r;
 }
 
-static int test_post(struct coap_resource *resource,
-		     struct coap_packet *request,
+static int test_post(struct coap_resource *resource, struct coap_packet *request,
 		     struct sockaddr *addr, socklen_t addr_len)
 {
-	static const char * const location_path[] = { "location1",
-						      "location2",
-						      "location3",
-						      NULL };
+	static const char *const location_path[] = {"location1", "location2", "location3", NULL};
 	uint8_t data[CONFIG_COAP_SERVER_MESSAGE_SIZE];
-	const char * const *p;
+	const char *const *p;
 	struct coap_packet response;
 	uint8_t token[COAP_TOKEN_MAX_LEN];
 	const uint8_t *payload;
@@ -205,17 +194,14 @@ static int test_post(struct coap_resource *resource,
 		type = COAP_TYPE_NON_CON;
 	}
 
-	r = coap_packet_init(&response, data, sizeof(data),
-			     COAP_VERSION_1, type, tkl, token,
+	r = coap_packet_init(&response, data, sizeof(data), COAP_VERSION_1, type, tkl, token,
 			     COAP_RESPONSE_CODE_CREATED, id);
 	if (r < 0) {
 		return r;
 	}
 
 	for (p = location_path; *p; p++) {
-		r = coap_packet_append_option(&response,
-					      COAP_OPTION_LOCATION_PATH,
-					      *p, strlen(*p));
+		r = coap_packet_append_option(&response, COAP_OPTION_LOCATION_PATH, *p, strlen(*p));
 		if (r < 0) {
 			return r;
 		}
@@ -226,37 +212,45 @@ static int test_post(struct coap_resource *resource,
 	return r;
 }
 
-static const char * const test_path[] = { "test", NULL };
+static const char *const test_path[] = {"test", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(test, coap_server,
-{
-	.get = piggyback_get,
-	.post = test_post,
-	.del = test_del,
-	.put = test_put,
-	.path = test_path,
-});
+			{
+				.get = piggyback_get,
+				.post = test_post,
+				.del = test_del,
+				.put = test_put,
+				.path = test_path,
+			});
+/* clang-format on */
 
-static const char * const segments_path[] = { "seg1", "seg2", "seg3", NULL };
+static const char *const segments_path[] = {"seg1", "seg2", "seg3", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(segments, coap_server,
-{
-	.get = piggyback_get,
-	.path = segments_path,
-});
+			{
+				.get = piggyback_get,
+				.path = segments_path,
+			});
+/* clang-format on */
 
 #if defined(CONFIG_COAP_URI_WILDCARD)
 
-static const char * const wildcard1_path[] = { "wild1", "+", "wild3", NULL };
+static const char *const wildcard1_path[] = {"wild1", "+", "wild3", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(wildcard1, coap_server,
-{
-	.get = piggyback_get,
-	.path = wildcard1_path,
-});
+			{
+				.get = piggyback_get,
+				.path = wildcard1_path,
+			});
+/* clang-format on */
 
-static const char * const wildcard2_path[] = { "wild2", "#", NULL };
+static const char *const wildcard2_path[] = {"wild2", "#", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(wildcard2, coap_server,
-{
-	.get = piggyback_get,
-	.path = wildcard2_path,
-});
+			{
+				.get = piggyback_get,
+				.path = wildcard2_path,
+			});
+/* clang-format on */
 
 #endif

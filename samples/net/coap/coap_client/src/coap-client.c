@@ -30,9 +30,9 @@ LOG_MODULE_REGISTER(net_coap_client_sample, LOG_LEVEL_DBG);
 
 #include "net_private.h"
 
-#define MAX_COAP_MSG_LEN 256
-#define COAP_DEFAULT_PORT 5683
-#define COAP_DEFAULT_PORT_STR STRINGIFY(COAP_DEFAULT_PORT)
+#define MAX_COAP_MSG_LEN       256
+#define COAP_DEFAULT_PORT      5683
+#define COAP_DEFAULT_PORT_STR  STRINGIFY(COAP_DEFAULT_PORT)
 #define COAP_PEER_HOST_MAX_LEN 128
 #define COAP_PEER_PORT_MAX_LEN 6
 
@@ -43,11 +43,11 @@ struct pollfd fds[1];
 static int nfds;
 
 /* CoAP Options */
-static const char * const test_path[] = { "test", NULL };
+static const char *const test_path[] = {"test", NULL};
 
-static const char * const large_path[] = { "large", NULL };
+static const char *const large_path[] = {"large", NULL};
 
-static const char * const obs_path[] = { "obs", NULL };
+static const char *const obs_path[] = {"obs", NULL};
 
 #define BLOCK_WISE_TRANSFER_SIZE_GET 2048
 
@@ -86,7 +86,7 @@ static void prepare_fds(void)
 static int resolve_peer_addr(struct sockaddr_storage *addr, socklen_t *addrlen)
 {
 	const char *peer = CONFIG_NET_SAMPLE_COAP_CLIENT_PEER;
-	struct sockaddr_storage parsed_addr = { 0 };
+	struct sockaddr_storage parsed_addr = {0};
 	struct addrinfo hints = {
 		.ai_family = AF_UNSPEC,
 		.ai_socktype = SOCK_DGRAM,
@@ -110,8 +110,7 @@ static int resolve_peer_addr(struct sockaddr_storage *addr, socklen_t *addrlen)
 			}
 
 			if (net_sin(net_sad(&parsed_addr))->sin_port == 0U) {
-				net_sin(net_sad(&parsed_addr))->sin_port =
-					htons(COAP_DEFAULT_PORT);
+				net_sin(net_sad(&parsed_addr))->sin_port = htons(COAP_DEFAULT_PORT);
 			}
 
 			*addrlen = sizeof(struct sockaddr_in);
@@ -207,8 +206,7 @@ static int start_coap_client(void)
 		return ret;
 	}
 
-	sock = socket((net_sad(&peer_addr))->sa_family,
-		      SOCK_DGRAM, IPPROTO_UDP);
+	sock = socket((net_sad(&peer_addr))->sa_family, SOCK_DGRAM, IPPROTO_UDP);
 	if (sock < 0) {
 		LOG_ERR("Failed to create UDP socket %d", errno);
 		return -errno;
@@ -275,7 +273,7 @@ static int send_simple_coap_request(uint8_t method)
 {
 	uint8_t payload[] = "payload";
 	struct coap_packet request;
-	const char * const *p;
+	const char *const *p;
 	uint8_t *data;
 	int r;
 
@@ -284,18 +282,15 @@ static int send_simple_coap_request(uint8_t method)
 		return -ENOMEM;
 	}
 
-	r = coap_packet_init(&request, data, MAX_COAP_MSG_LEN,
-			     COAP_VERSION_1, COAP_TYPE_CON,
-			     COAP_TOKEN_MAX_LEN, coap_next_token(),
-			     method, coap_next_id());
+	r = coap_packet_init(&request, data, MAX_COAP_MSG_LEN, COAP_VERSION_1, COAP_TYPE_CON,
+			     COAP_TOKEN_MAX_LEN, coap_next_token(), method, coap_next_id());
 	if (r < 0) {
 		LOG_ERR("Failed to init CoAP message");
 		goto end;
 	}
 
 	for (p = test_path; p && *p; p++) {
-		r = coap_packet_append_option(&request, COAP_OPTION_URI_PATH,
-					      *p, strlen(*p));
+		r = coap_packet_append_option(&request, COAP_OPTION_URI_PATH, *p, strlen(*p));
 		if (r < 0) {
 			LOG_ERR("Unable add option to request");
 			goto end;
@@ -315,8 +310,7 @@ static int send_simple_coap_request(uint8_t method)
 			goto end;
 		}
 
-		r = coap_packet_append_payload(&request, (uint8_t *)payload,
-					       sizeof(payload) - 1);
+		r = coap_packet_append_payload(&request, (uint8_t *)payload, sizeof(payload) - 1);
 		if (r < 0) {
 			LOG_ERR("Not able to append payload");
 			goto end;
@@ -460,13 +454,12 @@ end:
 static int send_large_coap_request(void)
 {
 	struct coap_packet request;
-	const char * const *p;
+	const char *const *p;
 	uint8_t *data;
 	int r;
 
 	if (blk_ctx.total_size == 0) {
-		coap_block_transfer_init(&blk_ctx, COAP_BLOCK_64,
-					 BLOCK_WISE_TRANSFER_SIZE_GET);
+		coap_block_transfer_init(&blk_ctx, COAP_BLOCK_64, BLOCK_WISE_TRANSFER_SIZE_GET);
 	}
 
 	data = (uint8_t *)k_malloc(MAX_COAP_MSG_LEN);
@@ -474,18 +467,16 @@ static int send_large_coap_request(void)
 		return -ENOMEM;
 	}
 
-	r = coap_packet_init(&request, data, MAX_COAP_MSG_LEN,
-			     COAP_VERSION_1, COAP_TYPE_CON,
-			     COAP_TOKEN_MAX_LEN, coap_next_token(),
-			     COAP_METHOD_GET, coap_next_id());
+	r = coap_packet_init(&request, data, MAX_COAP_MSG_LEN, COAP_VERSION_1, COAP_TYPE_CON,
+			     COAP_TOKEN_MAX_LEN, coap_next_token(), COAP_METHOD_GET,
+			     coap_next_id());
 	if (r < 0) {
 		LOG_ERR("Failed to init CoAP message");
 		goto end;
 	}
 
 	for (p = large_path; p && *p; p++) {
-		r = coap_packet_append_option(&request, COAP_OPTION_URI_PATH,
-					      *p, strlen(*p));
+		r = coap_packet_append_option(&request, COAP_OPTION_URI_PATH, *p, strlen(*p));
 		if (r < 0) {
 			LOG_ERR("Unable add option to request");
 			goto end;
@@ -528,8 +519,7 @@ static int get_large_coap_msgs(void)
 			    retries < CONFIG_NET_SAMPLE_COAP_CLIENT_BLOCKWISE_MAX_RETRIES) {
 				retries++;
 				LOG_WRN("Timed out waiting for block %zd, retry %d/%d",
-					blk_ctx.current / 64 /* COAP_BLOCK_64 */,
-					retries,
+					blk_ctx.current / 64 /* COAP_BLOCK_64 */, retries,
 					CONFIG_NET_SAMPLE_COAP_CLIENT_BLOCKWISE_MAX_RETRIES);
 				continue;
 			}
@@ -559,8 +549,8 @@ static void send_obs_reply_ack(uint16_t id)
 		return;
 	}
 
-	r = coap_packet_init(&request, data, MAX_COAP_MSG_LEN,
-			     COAP_VERSION_1, COAP_TYPE_ACK, 0, NULL, 0, id);
+	r = coap_packet_init(&request, data, MAX_COAP_MSG_LEN, COAP_VERSION_1, COAP_TYPE_ACK, 0,
+			     NULL, 0, id);
 	if (r < 0) {
 		LOG_ERR("Failed to init CoAP message");
 		goto end;
@@ -576,8 +566,7 @@ end:
 	k_free(data);
 }
 
-static int obs_notification_cb(const struct coap_packet *response,
-			       struct coap_reply *reply,
+static int obs_notification_cb(const struct coap_packet *response, struct coap_reply *reply,
 			       const struct sockaddr *from)
 {
 	uint16_t id = coap_header_get_id(response);
@@ -651,7 +640,7 @@ end:
 static int send_obs_coap_request(struct coap_reply *reply, void *user_data)
 {
 	struct coap_packet request;
-	const char * const *p;
+	const char *const *p;
 	uint8_t *data;
 	int r;
 
@@ -660,10 +649,9 @@ static int send_obs_coap_request(struct coap_reply *reply, void *user_data)
 		return -ENOMEM;
 	}
 
-	r = coap_packet_init(&request, data, MAX_COAP_MSG_LEN,
-			     COAP_VERSION_1, COAP_TYPE_CON,
-			     COAP_TOKEN_MAX_LEN, coap_next_token(),
-			     COAP_METHOD_GET, coap_next_id());
+	r = coap_packet_init(&request, data, MAX_COAP_MSG_LEN, COAP_VERSION_1, COAP_TYPE_CON,
+			     COAP_TOKEN_MAX_LEN, coap_next_token(), COAP_METHOD_GET,
+			     coap_next_id());
 	if (r < 0) {
 		LOG_ERR("Failed to init CoAP message");
 		goto end;
@@ -676,8 +664,7 @@ static int send_obs_coap_request(struct coap_reply *reply, void *user_data)
 	}
 
 	for (p = obs_path; p && *p; p++) {
-		r = coap_packet_append_option(&request, COAP_OPTION_URI_PATH,
-					      *p, strlen(*p));
+		r = coap_packet_append_option(&request, COAP_OPTION_URI_PATH, *p, strlen(*p));
 		if (r < 0) {
 			LOG_ERR("Unable add option to request");
 			goto end;
@@ -701,7 +688,7 @@ end:
 static int send_obs_reset_coap_request(struct coap_reply *reply)
 {
 	struct coap_packet request;
-	const char * const *p;
+	const char *const *p;
 	uint8_t *data;
 	int r;
 
@@ -710,10 +697,8 @@ static int send_obs_reset_coap_request(struct coap_reply *reply)
 		return -ENOMEM;
 	}
 
-	r = coap_packet_init(&request, data, MAX_COAP_MSG_LEN,
-			     COAP_VERSION_1, COAP_TYPE_CON,
-			     reply->tkl, reply->token,
-			     COAP_METHOD_GET, coap_next_id());
+	r = coap_packet_init(&request, data, MAX_COAP_MSG_LEN, COAP_VERSION_1, COAP_TYPE_CON,
+			     reply->tkl, reply->token, COAP_METHOD_GET, coap_next_id());
 	if (r < 0) {
 		LOG_ERR("Failed to init CoAP message");
 		goto end;
@@ -726,8 +711,7 @@ static int send_obs_reset_coap_request(struct coap_reply *reply)
 	}
 
 	for (p = obs_path; p && *p; p++) {
-		r = coap_packet_append_option(&request, COAP_OPTION_URI_PATH,
-					      *p, strlen(*p));
+		r = coap_packet_append_option(&request, COAP_OPTION_URI_PATH, *p, strlen(*p));
 		if (r < 0) {
 			LOG_ERR("Unable add option to request");
 			goto end;

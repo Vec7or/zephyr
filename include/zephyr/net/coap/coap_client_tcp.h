@@ -31,8 +31,8 @@ extern "C" {
 #endif
 
 /** Maximum size of a CoAP TCP message */
-#define MAX_COAP_TCP_MSG_LEN (CONFIG_COAP_CLIENT_MESSAGE_HEADER_SIZE + \
-			      CONFIG_COAP_CLIENT_MESSAGE_SIZE)
+#define MAX_COAP_TCP_MSG_LEN                                                                       \
+	(CONFIG_COAP_CLIENT_MESSAGE_HEADER_SIZE + CONFIG_COAP_CLIENT_MESSAGE_SIZE)
 
 /**
  * @typedef coap_client_tcp_response_cb_t
@@ -56,9 +56,8 @@ typedef void (*coap_client_tcp_response_cb_t)(const struct coap_client_response_
  *
  * @return Zero on success, a negative error code to abort upload.
  */
-typedef int (*coap_client_tcp_payload_cb_t)(size_t offset, const uint8_t **payload,
-					    size_t *len, bool *last_block,
-					    void *user_data);
+typedef int (*coap_client_tcp_payload_cb_t)(size_t offset, const uint8_t **payload, size_t *len,
+					    bool *last_block, void *user_data);
 
 /**
  * @typedef coap_client_tcp_socket_config_cb_t
@@ -118,11 +117,10 @@ union coap_client_tcp_event_data {
  * @param data Event-specific data (may be NULL for some events).
  * @param user_data User provided context.
  */
-typedef void (*coap_client_tcp_event_cb_t)(
-	struct coap_client_tcp *client,
-	enum coap_client_tcp_event event,
-	const union coap_client_tcp_event_data *data,
-	void *user_data);
+typedef void (*coap_client_tcp_event_cb_t)(struct coap_client_tcp *client,
+					   enum coap_client_tcp_event event,
+					   const union coap_client_tcp_event_data *data,
+					   void *user_data);
 
 /**
  * @brief Representation of extra options for the CoAP TCP client request
@@ -144,7 +142,7 @@ struct coap_client_tcp_option {
 };
 
 /** @cond INTERNAL_HIDDEN */
-#define MAX_TCP_PATH_SIZE (CONFIG_COAP_CLIENT_MAX_PATH_LENGTH + 1)
+#define MAX_TCP_PATH_SIZE     (CONFIG_COAP_CLIENT_MAX_PATH_LENGTH + 1)
 #define MAX_TCP_EXTRA_OPTIONS CONFIG_COAP_CLIENT_MAX_EXTRA_OPTIONS
 /** @endcond */
 
@@ -152,17 +150,17 @@ struct coap_client_tcp_option {
  * @brief Representation of a CoAP TCP client request.
  */
 struct coap_client_tcp_request {
-	enum coap_method method;                      /**< Method of the request */
-	char path[MAX_TCP_PATH_SIZE];                 /**< Path of the requested resource */
-	enum coap_content_format fmt;                 /**< Content format to be used */
-	const uint8_t *payload;                       /**< User allocated buffer for send request */
-	size_t len;                                   /**< Length of the payload */
-	coap_client_tcp_payload_cb_t payload_cb;      /**< Optional payload callback */
-	coap_client_tcp_response_cb_t cb;             /**< Callback when response received */
+	enum coap_method method;                 /**< Method of the request */
+	char path[MAX_TCP_PATH_SIZE];            /**< Path of the requested resource */
+	enum coap_content_format fmt;            /**< Content format to be used */
+	const uint8_t *payload;                  /**< User allocated buffer for send request */
+	size_t len;                              /**< Length of the payload */
+	coap_client_tcp_payload_cb_t payload_cb; /**< Optional payload callback */
+	coap_client_tcp_response_cb_t cb;        /**< Callback when response received */
 	struct coap_client_tcp_option
-		options[MAX_TCP_EXTRA_OPTIONS];       /**< Extra options to be added to request */
-	uint8_t num_options;                          /**< Number of extra options */
-	void *user_data;                              /**< User provided context */
+		options[MAX_TCP_EXTRA_OPTIONS]; /**< Extra options to be added to request */
+	uint8_t num_options;                    /**< Number of extra options */
+	void *user_data;                        /**< User provided context */
 };
 
 /** @cond INTERNAL_HIDDEN */
@@ -243,8 +241,7 @@ int coap_client_tcp_init(struct coap_client_tcp *client, const char *info);
  *
  * @return 0 on success, negative error code otherwise.
  */
-int coap_client_tcp_connect(struct coap_client_tcp *client,
-			    const struct net_sockaddr *addr,
+int coap_client_tcp_connect(struct coap_client_tcp *client, const struct net_sockaddr *addr,
 			    net_socklen_t addrlen, int proto);
 
 /**
@@ -267,8 +264,7 @@ int coap_client_tcp_close(struct coap_client_tcp *client);
  * @param req CoAP request structure.
  * @return 0 on success, -ENOTCONN if not connected, negative error code otherwise.
  */
-int coap_client_tcp_req(struct coap_client_tcp *client,
-			struct coap_client_tcp_request *req);
+int coap_client_tcp_req(struct coap_client_tcp *client, struct coap_client_tcp_request *req);
 
 /**
  * @brief Send CSM (Capabilities and Settings Message) over TCP
@@ -282,10 +278,8 @@ int coap_client_tcp_req(struct coap_client_tcp *client,
  * @param user_data User data for callback.
  * @return 0 on success, -ENOTCONN if not connected, negative error code otherwise.
  */
-int coap_client_tcp_csm_req(struct coap_client_tcp *client,
-			    uint32_t max_block_size,
-			    coap_client_tcp_response_cb_t cb,
-			    void *user_data);
+int coap_client_tcp_csm_req(struct coap_client_tcp *client, uint32_t max_block_size,
+			    coap_client_tcp_response_cb_t cb, void *user_data);
 
 /**
  * @brief Cancel all current TCP requests.
@@ -341,8 +335,8 @@ int coap_client_tcp_ping(struct coap_client_tcp *client);
  * @param hold_off_sec Hold-off time in seconds (0 if none).
  * @return 0 on success, negative error code otherwise.
  */
-int coap_client_tcp_release(struct coap_client_tcp *client,
-			    const char *alt_addr, uint32_t hold_off_sec);
+int coap_client_tcp_release(struct coap_client_tcp *client, const char *alt_addr,
+			    uint32_t hold_off_sec);
 
 /**
  * @brief Set callback for signaling events (Release/Abort)
@@ -351,8 +345,7 @@ int coap_client_tcp_release(struct coap_client_tcp *client,
  * @param cb Callback function to invoke on events.
  * @param user_data User data passed to callback.
  */
-void coap_client_tcp_set_event_cb(struct coap_client_tcp *client,
-				  coap_client_tcp_event_cb_t cb,
+void coap_client_tcp_set_event_cb(struct coap_client_tcp *client, coap_client_tcp_event_cb_t cb,
 				  void *user_data);
 
 #ifdef __cplusplus

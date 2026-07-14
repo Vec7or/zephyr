@@ -17,12 +17,9 @@ static int obs_counter;
 static void update_counter(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(obs_work, update_counter);
 
-static int send_notification_packet(struct coap_resource *resource,
-				    const struct sockaddr *addr,
-				    socklen_t addr_len,
-				    uint16_t age, uint16_t id,
-				    const uint8_t *token, uint8_t tkl,
-				    bool is_response)
+static int send_notification_packet(struct coap_resource *resource, const struct sockaddr *addr,
+				    socklen_t addr_len, uint16_t age, uint16_t id,
+				    const uint8_t *token, uint8_t tkl, bool is_response)
 {
 	uint8_t data[CONFIG_COAP_SERVER_MESSAGE_SIZE];
 	struct coap_packet response;
@@ -40,8 +37,7 @@ static int send_notification_packet(struct coap_resource *resource,
 		id = coap_next_id();
 	}
 
-	r = coap_packet_init(&response, data, sizeof(data),
-			     COAP_VERSION_1, type, tkl, token,
+	r = coap_packet_init(&response, data, sizeof(data), COAP_VERSION_1, type, tkl, token,
 			     COAP_RESPONSE_CODE_CONTENT, id);
 	if (r < 0) {
 		return r;
@@ -66,14 +62,12 @@ static int send_notification_packet(struct coap_resource *resource,
 	}
 
 	/* The response that coap-client expects */
-	r = snprintk((char *) payload, sizeof(payload),
-		     "Counter: %d\n", obs_counter);
+	r = snprintk((char *)payload, sizeof(payload), "Counter: %d\n", obs_counter);
 	if (r < 0) {
 		return r;
 	}
 
-	r = coap_packet_append_payload(&response, (uint8_t *)payload,
-				       strlen(payload));
+	r = coap_packet_append_payload(&response, (uint8_t *)payload, strlen(payload));
 	if (r < 0) {
 		return r;
 	}
@@ -85,8 +79,7 @@ static int send_notification_packet(struct coap_resource *resource,
 	return r;
 }
 
-static int obs_get(struct coap_resource *resource,
-		   struct coap_packet *request,
+static int obs_get(struct coap_resource *resource, struct coap_packet *request,
 		   struct sockaddr *addr, socklen_t addr_len)
 {
 	uint8_t token[COAP_TOKEN_MAX_LEN];
@@ -107,28 +100,26 @@ static int obs_get(struct coap_resource *resource,
 	LOG_INF("type: %u code %u id %u", type, code, id);
 	LOG_INF("*******");
 
-	return send_notification_packet(resource, addr, addr_len,
-					r == 0 ? resource->age : 0,
-					id, token, tkl, true);
+	return send_notification_packet(resource, addr, addr_len, r == 0 ? resource->age : 0, id,
+					token, tkl, true);
 }
 
-static void obs_notify(struct coap_resource *resource,
-		       struct coap_observer *observer)
+static void obs_notify(struct coap_resource *resource, struct coap_observer *observer)
 {
-	send_notification_packet(resource,
-				 net_sad(&observer->addr),
-				 net_family2size(observer->addr.ss_family),
-				 resource->age, 0,
+	send_notification_packet(resource, net_sad(&observer->addr),
+				 net_family2size(observer->addr.ss_family), resource->age, 0,
 				 observer->token, observer->tkl, false);
 }
 
-static const char * const obs_path[] = { "obs", NULL };
+static const char *const obs_path[] = {"obs", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(obs, coap_server,
-{
-	.get = obs_get,
-	.path = obs_path,
-	.notify = obs_notify,
-});
+			{
+				.get = obs_get,
+				.path = obs_path,
+				.notify = obs_notify,
+			});
+/* clang-format on */
 
 static void update_counter(struct k_work *work)
 {

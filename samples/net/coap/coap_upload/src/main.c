@@ -24,8 +24,7 @@ LOG_MODULE_REGISTER(coap_upload, LOG_LEVEL_INF);
 static K_SEM_DEFINE(coap_done_sem, 0, 1);
 static int64_t start_time;
 
-static void response_cb(const struct coap_client_response_data *data,
-			void *user_data)
+static void response_cb(const struct coap_client_response_data *data, void *user_data)
 {
 
 	if (data->result_code < 0) {
@@ -39,8 +38,7 @@ static void response_cb(const struct coap_client_response_data *data,
 			goto error;
 		}
 
-		LOG_INF("CoAP upload %s done in %" PRId64 " ms",
-			(char *)user_data, elapsed_time);
+		LOG_INF("CoAP upload %s done in %" PRId64 " ms", (char *)user_data, elapsed_time);
 
 		k_sem_give(&coap_done_sem);
 	} else {
@@ -48,8 +46,8 @@ static void response_cb(const struct coap_client_response_data *data,
 			goto error;
 		}
 
-		LOG_INF("CoAP upload %s ongoing, sent %zu bytes so far",
-			(char *)user_data, data->offset);
+		LOG_INF("CoAP upload %s ongoing, sent %zu bytes so far", (char *)user_data,
+			data->offset);
 	}
 
 	return;
@@ -59,8 +57,8 @@ error:
 	k_sem_give(&coap_done_sem);
 }
 
-static int short_payload_cb(size_t offset, const uint8_t **payload, size_t *len,
-			    bool *last_block, void *user_data)
+static int short_payload_cb(size_t offset, const uint8_t **payload, size_t *len, bool *last_block,
+			    void *user_data)
 {
 	if (*len < sizeof(SHORT_PAYLOAD) - 1) {
 		return -ENOMEM;
@@ -70,14 +68,13 @@ static int short_payload_cb(size_t offset, const uint8_t **payload, size_t *len,
 	*len = sizeof(SHORT_PAYLOAD) - 1;
 	*last_block = true;
 
-	LOG_DBG("CoAP short payload callback, returning %zu bytes at offset %zu",
-		*len, offset);
+	LOG_DBG("CoAP short payload callback, returning %zu bytes at offset %zu", *len, offset);
 
 	return 0;
 }
 
-static int block_payload_cb(size_t offset, const uint8_t **payload, size_t *len,
-			    bool *last_block, void *user_data)
+static int block_payload_cb(size_t offset, const uint8_t **payload, size_t *len, bool *last_block,
+			    void *user_data)
 {
 	size_t data_left;
 
@@ -95,8 +92,7 @@ static int block_payload_cb(size_t offset, const uint8_t **payload, size_t *len,
 		*last_block = false;
 	}
 
-	LOG_DBG("CoAP blockwise payload callback, returning %zu bytes at offset %zu",
-		*len, offset);
+	LOG_DBG("CoAP blockwise payload callback, returning %zu bytes at offset %zu", *len, offset);
 
 	return 0;
 }
@@ -123,55 +119,54 @@ static int coap_upload_single(struct coap_client *client, int sock,
 	return ret;
 }
 
-static void coap_upload(struct coap_client *client, struct sockaddr *sa,
-			socklen_t addrlen)
+static void coap_upload(struct coap_client *client, struct sockaddr *sa, socklen_t addrlen)
 {
-	struct coap_client_request requests[] = {
-		{
-			.method = COAP_METHOD_PUT,
-			.confirmable = true,
-			.fmt = COAP_CONTENT_FORMAT_TEXT_PLAIN,
-			.path = "test",
-			.payload = SHORT_PAYLOAD,
-			.len = sizeof(SHORT_PAYLOAD) - 1,
-			.cb = response_cb,
-			.user_data = "short",
-		},
-		{
-			.method = COAP_METHOD_PUT,
-			.confirmable = true,
-			.fmt = COAP_CONTENT_FORMAT_TEXT_PLAIN,
-			.path = "test",
-			.cb = response_cb,
-			.payload_cb = short_payload_cb,
-			.user_data = "short with callback",
-		},
-		{
-			.method = COAP_METHOD_PUT,
-			.confirmable = true,
-			.fmt = COAP_CONTENT_FORMAT_TEXT_PLAIN,
-			.path = "large-update",
-			.payload = LOREM_IPSUM_SHORT,
-			.len = LOREM_IPSUM_SHORT_STRLEN,
-			.cb = response_cb,
-			.user_data = "blockwise",
-		},
-		{
-			.method = COAP_METHOD_PUT,
-			.confirmable = true,
-			.fmt = COAP_CONTENT_FORMAT_TEXT_PLAIN,
-			.path = "large-update",
-			.cb = response_cb,
-			.payload_cb = block_payload_cb,
-			.user_data = "blockwise with callback",
-		}
-	};
+
+	/* clang-format off */
+	struct coap_client_request requests[] = {{
+							.method = COAP_METHOD_PUT,
+							.confirmable = true,
+							.fmt = COAP_CONTENT_FORMAT_TEXT_PLAIN,
+							.path = "test",
+							.payload = SHORT_PAYLOAD,
+							.len = sizeof(SHORT_PAYLOAD) - 1,
+							.cb = response_cb,
+							.user_data = "short",
+						},
+						{
+							.method = COAP_METHOD_PUT,
+							.confirmable = true,
+							.fmt = COAP_CONTENT_FORMAT_TEXT_PLAIN,
+							.path = "test",
+							.cb = response_cb,
+							.payload_cb = short_payload_cb,
+							.user_data = "short with callback",
+						},
+						{
+							.method = COAP_METHOD_PUT,
+							.confirmable = true,
+							.fmt = COAP_CONTENT_FORMAT_TEXT_PLAIN,
+							.path = "large-update",
+							.payload = LOREM_IPSUM_SHORT,
+							.len = LOREM_IPSUM_SHORT_STRLEN,
+							.cb = response_cb,
+							.user_data = "blockwise",
+						},
+						{
+							.method = COAP_METHOD_PUT,
+							.confirmable = true,
+							.fmt = COAP_CONTENT_FORMAT_TEXT_PLAIN,
+							.path = "large-update",
+							.cb = response_cb,
+							.payload_cb = block_payload_cb,
+							.user_data = "blockwise with callback",
+						}};
+	/* clang-format on */
 	int sock;
 	int ret;
 
 	LOG_INF("");
-	LOG_INF("* Starting CoAP upload using %s",
-		(AF_INET == sa->sa_family) ? "IPv4" : "IPv6");
+	LOG_INF("* Starting CoAP upload using %s", (AF_INET == sa->sa_family) ? "IPv4" : "IPv6");
 
 	sock = socket(sa->sa_family, SOCK_DGRAM, 0);
 	if (sock < 0) {
@@ -183,14 +178,13 @@ static void coap_upload(struct coap_client *client, struct sockaddr *sa,
 	if (ret < 0) {
 		LOG_ERR("Failed to connect socket, err %d", errno);
 		goto out;
-
 	}
 
 	ARRAY_FOR_EACH(requests, i) {
 		ret = coap_upload_single(client, sock, &requests[i]);
 		if (ret < 0) {
-			LOG_ERR("CoAP upload %s failed, err %d",
-				(char *)requests[i].user_data, ret);
+			LOG_ERR("CoAP upload %s failed, err %d", (char *)requests[i].user_data,
+				ret);
 			goto out;
 		}
 	}

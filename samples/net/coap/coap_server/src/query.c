@@ -11,8 +11,7 @@ LOG_MODULE_DECLARE(net_coap_service_sample);
 #include <zephyr/sys/printk.h>
 #include <zephyr/net/coap/coap_service.h>
 
-static int query_get(struct coap_resource *resource,
-		     struct coap_packet *request,
+static int query_get(struct coap_resource *resource, struct coap_packet *request,
 		     struct sockaddr *addr, socklen_t addr_len)
 {
 	uint8_t data[CONFIG_COAP_SERVER_MESSAGE_SIZE];
@@ -58,9 +57,8 @@ static int query_get(struct coap_resource *resource,
 
 	LOG_INF("*******");
 
-	r = coap_packet_init(&response, data, sizeof(data),
-			     COAP_VERSION_1, COAP_TYPE_ACK, tkl, token,
-			     COAP_RESPONSE_CODE_CONTENT, id);
+	r = coap_packet_init(&response, data, sizeof(data), COAP_VERSION_1, COAP_TYPE_ACK, tkl,
+			     token, COAP_RESPONSE_CODE_CONTENT, id);
 	if (r < 0) {
 		return r;
 	}
@@ -77,14 +75,13 @@ static int query_get(struct coap_resource *resource,
 	}
 
 	/* The response that coap-client expects */
-	r = snprintk((char *) payload, sizeof(payload),
-		     "Type: %u\nCode: %u\nMID: %u\n", type, code, id);
+	r = snprintk((char *)payload, sizeof(payload), "Type: %u\nCode: %u\nMID: %u\n", type, code,
+		     id);
 	if (r < 0) {
 		return r;
 	}
 
-	r = coap_packet_append_payload(&response, (uint8_t *)payload,
-				       strlen(payload));
+	r = coap_packet_append_payload(&response, (uint8_t *)payload, strlen(payload));
 	if (r < 0) {
 		return r;
 	}
@@ -94,9 +91,11 @@ static int query_get(struct coap_resource *resource,
 	return r;
 }
 
-static const char * const query_path[] = { "query", NULL };
+static const char *const query_path[] = {"query", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(query, coap_server,
-{
-	.get = query_get,
-	.path = query_path,
-});
+			{
+				.get = query_get,
+				.path = query_path,
+			});
+/* clang-format on */

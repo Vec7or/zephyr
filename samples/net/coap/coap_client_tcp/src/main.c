@@ -27,7 +27,7 @@
 
 LOG_MODULE_REGISTER(coap_tcp_sample, LOG_LEVEL_DBG);
 
-#define PEER_PORT 5683
+#define PEER_PORT     5683
 #define RESOURCE_PATH "test"
 
 static struct coap_client_tcp client;
@@ -36,10 +36,8 @@ static K_SEM_DEFINE(csm_sem, 0, 1);
 static K_SEM_DEFINE(pong_sem, 0, 1);
 static bool response_received;
 
-static void event_callback(struct coap_client_tcp *cli,
-			   enum coap_client_tcp_event event,
-			   const union coap_client_tcp_event_data *data,
-			   void *user_data)
+static void event_callback(struct coap_client_tcp *cli, enum coap_client_tcp_event event,
+			   const union coap_client_tcp_event_data *data, void *user_data)
 {
 	switch (event) {
 	case COAP_CLIENT_TCP_EVENT_CSM_UPDATED:
@@ -59,8 +57,7 @@ static void event_callback(struct coap_client_tcp *cli,
 	}
 }
 
-static void response_callback(const struct coap_client_response_data *data,
-			      void *user_data)
+static void response_callback(const struct coap_client_response_data *data, void *user_data)
 {
 	if (data->result_code < 0) {
 		LOG_ERR("Request failed with error: %d", data->result_code);
@@ -69,13 +66,11 @@ static void response_callback(const struct coap_client_response_data *data,
 		return;
 	}
 
-	LOG_INF("Response received: %d.%02d",
-		(data->result_code >> 5), (data->result_code & 0x1F));
+	LOG_INF("Response received: %d.%02d", (data->result_code >> 5), (data->result_code & 0x1F));
 
 	if (data->payload != NULL && data->payload_len > 0) {
-		LOG_INF("Payload (%zu bytes): %.*s",
-			data->payload_len,
-			(int)data->payload_len, data->payload);
+		LOG_INF("Payload (%zu bytes): %.*s", data->payload_len, (int)data->payload_len,
+			data->payload);
 	}
 
 	if (data->last_block) {
@@ -124,8 +119,7 @@ int main(void)
 	LOG_INF("CoAP over TCP Client Sample");
 	LOG_INF("============================");
 
-	inet_pton(AF_INET, CONFIG_NET_CONFIG_PEER_IPV4_ADDR,
-		  &server_addr.sin_addr);
+	inet_pton(AF_INET, CONFIG_NET_CONFIG_PEER_IPV4_ADDR, &server_addr.sin_addr);
 
 	/* Initialize CoAP TCP client */
 	ret = coap_client_tcp_init(&client, "coap_tcp");
@@ -136,12 +130,9 @@ int main(void)
 
 	coap_client_tcp_set_event_cb(&client, event_callback, NULL);
 
-	LOG_INF("Connecting to %s:%d...", CONFIG_NET_CONFIG_PEER_IPV4_ADDR,
-		PEER_PORT);
+	LOG_INF("Connecting to %s:%d...", CONFIG_NET_CONFIG_PEER_IPV4_ADDR, PEER_PORT);
 
-	ret = coap_client_tcp_connect(&client,
-				      (struct sockaddr *)&server_addr,
-				      sizeof(server_addr),
+	ret = coap_client_tcp_connect(&client, (struct sockaddr *)&server_addr, sizeof(server_addr),
 				      IPPROTO_TCP);
 	if (ret < 0) {
 		LOG_ERR("Failed to connect: %d", ret);

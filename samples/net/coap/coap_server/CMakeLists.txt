@@ -17,7 +17,7 @@ if(CONFIG_NET_SOCKETS_ENABLE_DTLS AND
   add_dependencies(app development_psk)
 endif()
 
-FILE(GLOB app_sources src/*.c)
+file(GLOB app_sources src/*.c)
 target_sources(app PRIVATE ${app_sources})
 target_include_directories(app PRIVATE ${ZEPHYR_BASE}/subsys/net/ip)
 

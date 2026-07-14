@@ -12,8 +12,7 @@ LOG_MODULE_DECLARE(net_coap_service_sample);
 #include <zephyr/net/coap/coap_service.h>
 #include <zephyr/net/coap/coap_link_format.h>
 
-static int core_get(struct coap_resource *resource,
-		    struct coap_packet *request,
+static int core_get(struct coap_resource *resource, struct coap_packet *request,
 		    struct sockaddr *addr, socklen_t addr_len)
 {
 	static const char dummy_str[] = "Just a test\n";
@@ -27,9 +26,8 @@ static int core_get(struct coap_resource *resource,
 	id = coap_header_get_id(request);
 	tkl = coap_header_get_token(request, token);
 
-	r = coap_packet_init(&response, data, sizeof(data),
-			     COAP_VERSION_1, COAP_TYPE_ACK, tkl, token,
-			     COAP_RESPONSE_CODE_CONTENT, id);
+	r = coap_packet_init(&response, data, sizeof(data), COAP_VERSION_1, COAP_TYPE_ACK, tkl,
+			     token, COAP_RESPONSE_CODE_CONTENT, id);
 	if (r < 0) {
 		return r;
 	}
@@ -39,8 +37,7 @@ static int core_get(struct coap_resource *resource,
 		return r;
 	}
 
-	r = coap_packet_append_payload(&response, (uint8_t *)dummy_str,
-				       sizeof(dummy_str));
+	r = coap_packet_append_payload(&response, (uint8_t *)dummy_str, sizeof(dummy_str));
 	if (r < 0) {
 		return r;
 	}
@@ -50,32 +47,36 @@ static int core_get(struct coap_resource *resource,
 	return r;
 }
 
-static const char * const core_1_path[] = { "core1", NULL };
-static const char * const core_1_attributes[] = {
+static const char *const core_1_path[] = {"core1", NULL};
+static const char *const core_1_attributes[] = {
 	"title=\"Core 1\"",
 	"rt=core1",
 	NULL,
 };
+/* clang-format off */
 COAP_RESOURCE_DEFINE(core_1, coap_server,
-{
-	.get = core_get,
-	.path = core_1_path,
-	.metadata = &((struct coap_core_metadata) {
-		.attributes = core_1_attributes,
-	}),
-});
+		{
+			.get = core_get,
+			.path = core_1_path,
+			.metadata = &((struct coap_core_metadata){
+				.attributes = core_1_attributes,
+			}),
+		});
+/* clang-format on */
 
-static const char * const core_2_path[] = { "core2", NULL };
-static const char * const core_2_attributes[] = {
+static const char *const core_2_path[] = {"core2", NULL};
+static const char *const core_2_attributes[] = {
 	"title=\"Core 2\"",
 	"rt=core2",
 	NULL,
 };
+/* clang-format off */
 COAP_RESOURCE_DEFINE(core_2, coap_server,
-{
-	.get = core_get,
-	.path = core_2_path,
-	.metadata = &((struct coap_core_metadata) {
-		.attributes = core_2_attributes,
-	}),
-});
+		{
+			.get = core_get,
+			.path = core_2_path,
+			.metadata = &((struct coap_core_metadata){
+				.attributes = core_2_attributes,
+			}),
+		});
+/* clang-format on */

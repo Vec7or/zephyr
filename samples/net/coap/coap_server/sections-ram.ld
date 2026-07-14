@@ -1,4 +1,8 @@
-/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * Copyright (c) 2023 Basalte bv
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 #include <zephyr/linker/iterable_sections.h>
 

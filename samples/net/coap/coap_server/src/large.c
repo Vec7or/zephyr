@@ -13,8 +13,7 @@ LOG_MODULE_DECLARE(net_coap_service_sample);
 
 #define BLOCK_WISE_TRANSFER_SIZE_GET 2048
 
-static int large_get(struct coap_resource *resource,
-		     struct coap_packet *request,
+static int large_get(struct coap_resource *resource, struct coap_packet *request,
 		     struct sockaddr *addr, socklen_t addr_len)
 
 {
@@ -48,9 +47,8 @@ static int large_get(struct coap_resource *resource,
 	LOG_INF("type: %u code %u id %u", type, code, id);
 	LOG_INF("*******");
 
-	r = coap_packet_init(&response, data, sizeof(data),
-			     COAP_VERSION_1, COAP_TYPE_ACK, tkl, token,
-			     COAP_RESPONSE_CODE_CONTENT, id);
+	r = coap_packet_init(&response, data, sizeof(data), COAP_VERSION_1, COAP_TYPE_ACK, tkl,
+			     token, COAP_RESPONSE_CODE_CONTENT, id);
 	if (r < 0) {
 		return -EINVAL;
 	}
@@ -71,8 +69,7 @@ static int large_get(struct coap_resource *resource,
 		return r;
 	}
 
-	size = MIN(coap_block_size_to_bytes(ctx.block_size),
-		   ctx.total_size - ctx.current);
+	size = MIN(coap_block_size_to_bytes(ctx.block_size), ctx.total_size - ctx.current);
 
 	memset(payload, 'A', MIN(size, sizeof(payload)));
 
@@ -92,8 +89,7 @@ static int large_get(struct coap_resource *resource,
 	return r;
 }
 
-static int large_update_put(struct coap_resource *resource,
-			    struct coap_packet *request,
+static int large_update_put(struct coap_resource *resource, struct coap_packet *request,
 			    struct sockaddr *addr, socklen_t addr_len)
 {
 	uint8_t data[CONFIG_COAP_SERVER_MESSAGE_SIZE];
@@ -134,9 +130,8 @@ static int large_update_put(struct coap_resource *resource,
 	}
 
 	LOG_INF("**************");
-	LOG_INF("[ctx] current %zu block_size %u total_size %zu",
-		ctx.current, coap_block_size_to_bytes(ctx.block_size),
-		ctx.total_size);
+	LOG_INF("[ctx] current %zu block_size %u total_size %zu", ctx.current,
+		coap_block_size_to_bytes(ctx.block_size), ctx.total_size);
 	LOG_INF("**************");
 
 	code = coap_header_get_code(request);
@@ -172,8 +167,7 @@ static int large_update_put(struct coap_resource *resource,
 	return r;
 }
 
-static int large_create_post(struct coap_resource *resource,
-			     struct coap_packet *request,
+static int large_create_post(struct coap_resource *resource, struct coap_packet *request,
 			     struct sockaddr *addr, socklen_t addr_len)
 {
 	uint8_t data[CONFIG_COAP_SERVER_MESSAGE_SIZE];
@@ -244,23 +238,29 @@ static int large_create_post(struct coap_resource *resource,
 	return r;
 }
 
-static const char * const large_path[] = { "large", NULL };
+static const char *const large_path[] = {"large", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(large, coap_server,
-{
-	.get = large_get,
-	.path = large_path,
-});
+			{
+				.get = large_get,
+				.path = large_path,
+			});
+/* clang-format on */
 
-static const char * const large_update_path[] = { "large-update", NULL };
+static const char *const large_update_path[] = {"large-update", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(large_update, coap_server,
-{
-	.put = large_update_put,
-	.path = large_update_path,
-});
+			{
+				.put = large_update_put,
+				.path = large_update_path,
+			});
+/* clang-format on */
 
-static const char * const large_create_path[] = { "large-create", NULL };
+static const char *const large_create_path[] = {"large-create", NULL};
+/* clang-format off */
 COAP_RESOURCE_DEFINE(large_create, coap_server,
-{
-	.post = large_create_post,
-	.path = large_create_path,
-});
+			{
+				.post = large_create_post,
+				.path = large_create_path,
+			});
+/* clang-format on */

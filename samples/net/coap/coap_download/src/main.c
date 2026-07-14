@@ -62,12 +62,11 @@ static void do_coap_download(struct sockaddr *sa)
 					      .payload = NULL,
 					      .len = 0,
 					      .cb = on_coap_response,
-					      .options = { },
+					      .options = {},
 					      .num_options = 0,
 					      .user_data = NULL};
 
-	LOG_INF("Starting CoAP download using %s",
-		(AF_INET == sa->sa_family) ? "IPv4" : "IPv6");
+	LOG_INF("Starting CoAP download using %s", (AF_INET == sa->sa_family) ? "IPv4" : "IPv6");
 
 	sockfd = socket(sa->sa_family, SOCK_DGRAM, 0);
 	if (sockfd < 0) {
