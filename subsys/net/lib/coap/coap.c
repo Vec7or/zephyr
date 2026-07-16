@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2018 Intel Corporation
  * Copyright (c) 2025 Ellenby Technologies Inc.
+ * Copyright (c) 2026 Siemens AG
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,6 +27,8 @@ LOG_MODULE_REGISTER(net_coap, CONFIG_COAP_LOG_LEVEL);
 #include <zephyr/net/net_log.h>
 #include <zephyr/net/coap.h>
 #include <zephyr/net/coap_mgmt.h>
+
+#include "coap_internal.h"
 
 #define COAP_PATH_ELEM_DELIM '/'
 #define COAP_PATH_ELEM_QUERY '?'
@@ -192,6 +195,9 @@ int coap_packet_init(struct coap_packet *cpkt, uint8_t *data, uint16_t max_len,
 	cpkt->offset = 0U;
 	cpkt->max_len = max_len;
 	cpkt->delta = 0U;
+#if defined(CONFIG_COAP_OSCORE)
+	cpkt->is_oscore = false;
+#endif /* defined(CONFIG_COAP_OSCORE) */
 
 	hdr = (ver & 0x3) << 6;
 	hdr |= (type & 0x3) << 4;
@@ -778,6 +784,9 @@ int coap_packet_parse(struct coap_packet *cpkt, uint8_t *data, uint16_t len,
 	cpkt->opt_len = 0U;
 	cpkt->hdr_len = 0U;
 	cpkt->delta = 0U;
+#if defined(CONFIG_COAP_OSCORE)
+	cpkt->is_oscore = false;
+#endif /* defined(CONFIG_COAP_OSCORE) */
 
 	/* Token lengths 9-15 are reserved. */
 	tkl = cpkt->data[0] & 0x0f;
@@ -1974,14 +1983,29 @@ bool coap_request_is_observe(const struct coap_packet *request)
 	return coap_get_option_int(request, COAP_OPTION_OBSERVE) == 0;
 }
 
-void coap_observer_init(struct coap_observer *observer,
-			const struct coap_packet *request,
+void coap_observer_init(struct coap_observer *observer, const struct coap_packet *request,
 			const struct net_sockaddr *addr)
 {
 	observer->tkl = coap_header_get_token(request, observer->token);
 
 	memcpy(&observer->addr, addr, net_family2size(addr->sa_family));
+
+#if defined(CONFIG_COAP_OSCORE)
+	observer->is_oscore = false;
+#endif
 }
+
+#if defined(CONFIG_COAP_OSCORE)
+void coap_observer_init_oscore(struct coap_observer *observer, const struct coap_packet *request,
+			       const struct net_sockaddr *addr, bool is_oscore)
+{
+	observer->tkl = coap_header_get_token(request, observer->token);
+
+	memcpy(&observer->addr, addr, net_family2size(addr->sa_family));
+
+	observer->is_oscore = is_oscore;
+}
+#endif /* CONFIG_COAP_OSCORE */
 
 static inline void coap_observer_raise_event(struct coap_resource *resource,
 					     struct coap_observer *observer,
@@ -2031,8 +2055,7 @@ bool coap_remove_observer(struct coap_resource *resource,
 	return true;
 }
 
-static bool sockaddr_equal(const struct net_sockaddr *a,
-			   const struct net_sockaddr *b)
+bool coap_sockaddr_equal(const struct net_sockaddr *a, const struct net_sockaddr *b)
 {
 	/* FIXME: Should we consider ipv6-mapped ipv4 addresses as equal to
 	 * ipv4 addresses?
@@ -2079,9 +2102,8 @@ struct coap_observer *coap_find_observer(
 	for (size_t i = 0; i < len; i++) {
 		struct coap_observer *o = &observers[i];
 
-		if (o->tkl == token_len &&
-		    memcmp(o->token, token, token_len) == 0 &&
-		    sockaddr_equal(net_sad(&o->addr), addr)) {
+		if (o->tkl == token_len && memcmp(o->token, token, token_len) == 0 &&
+		    coap_sockaddr_equal(net_sad(&o->addr), addr)) {
 			return o;
 		}
 	}
@@ -2098,7 +2120,7 @@ struct coap_observer *coap_find_observer_by_addr(
 	for (i = 0; i < len; i++) {
 		struct coap_observer *o = &observers[i];
 
-		if (sockaddr_equal(net_sad(&o->addr), addr)) {
+		if (coap_sockaddr_equal(net_sad(&o->addr), addr)) {
 			return o;
 		}
 	}
@@ -2174,6 +2196,9 @@ int coap_tcp_packet_init(struct coap_packet *cpkt, uint8_t *data,
 	cpkt->offset = 0U;
 	cpkt->max_len = max_len;
 	cpkt->delta = 0U;
+#if defined(CONFIG_COAP_OSCORE)
+	cpkt->is_oscore = false;
+#endif /* defined(CONFIG_COAP_OSCORE) */
 
 	/* Assuming packet without options or payload */
 	hdr = 0;
@@ -2313,6 +2338,9 @@ int coap_tcp_packet_parse(struct coap_packet *cpkt, uint8_t *data,
 	cpkt->opt_len = 0U;
 	cpkt->hdr_len = 0U;
 	cpkt->delta = 0U;
+#if defined(CONFIG_COAP_OSCORE)
+	cpkt->is_oscore = false;
+#endif /* defined(CONFIG_COAP_OSCORE) */
 
 	tkl = cpkt->data[0] & 0x0f;
 	if (tkl > 8) {

@@ -51,6 +51,7 @@ enum coap_option_num {
 	COAP_OPTION_OBSERVE = 6,         /**< Observe (RFC 7641) */
 	COAP_OPTION_URI_PORT = 7,        /**< Uri-Port */
 	COAP_OPTION_LOCATION_PATH = 8,   /**< Location-Path */
+	COAP_OPTION_OSCORE = 9,          /**< OSCORE (RFC 8613) */
 	COAP_OPTION_URI_PATH = 11,       /**< Uri-Path */
 	COAP_OPTION_CONTENT_FORMAT = 12, /**< Content-Format */
 	COAP_OPTION_MAX_AGE = 14,        /**< Max-Age */
@@ -334,6 +335,13 @@ struct coap_observer {
 	uint8_t token[8];
 	/** Extended token length */
 	uint8_t tkl;
+#if defined(CONFIG_COAP_OSCORE) || defined(__DOXYGEN__)
+	/**
+	 * True if the observer is OSCORE protected
+	 * @kconfig_dep{CONFIG_COAP_OSCORE}
+	 */
+	bool is_oscore;
+#endif
 };
 
 /**
@@ -352,6 +360,13 @@ struct coap_packet {
 	 * @kconfig_dep{CONFIG_COAP_KEEP_USER_DATA}
 	 */
 	void *user_data;
+#endif
+#if defined(CONFIG_COAP_OSCORE)
+	/**
+	 * True if the packet was received OSCORE protected
+	 * @kconfig_dep{CONFIG_COAP_OSCORE}
+	 */
+	bool is_oscore;
 #endif
 };
 
@@ -992,8 +1007,7 @@ int coap_get_block2_option(const struct coap_packet *cpkt, bool *has_more,
  *
  * @return 0 in case of success or negative in case of error.
  */
-int coap_update_from_block(const struct coap_packet *cpkt,
-			   struct coap_block_context *ctx);
+int coap_update_from_block(const struct coap_packet *cpkt, struct coap_block_context *ctx);
 
 /**
  * @brief Updates @a ctx according to @a option set in @a cpkt
@@ -1007,8 +1021,7 @@ int coap_update_from_block(const struct coap_packet *cpkt,
  * @return The offset in the block-wise transfer, 0 if the transfer
  * has finished or a negative value in case of an error.
  */
-int coap_next_block_for_option(const struct coap_packet *cpkt,
-			       struct coap_block_context *ctx,
+int coap_next_block_for_option(const struct coap_packet *cpkt, struct coap_block_context *ctx,
 			       enum coap_option_num option);
 
 /**
@@ -1022,8 +1035,7 @@ int coap_next_block_for_option(const struct coap_packet *cpkt,
  * @return The offset in the block-wise transfer, 0 if the transfer
  * has finished.
  */
-size_t coap_next_block(const struct coap_packet *cpkt,
-		       struct coap_block_context *ctx);
+size_t coap_next_block(const struct coap_packet *cpkt, struct coap_block_context *ctx);
 
 /**
  * @brief Indicates that the remote device referenced by @a addr, with
@@ -1033,9 +1045,25 @@ size_t coap_next_block(const struct coap_packet *cpkt,
  * @param request Request on which the observer will be based
  * @param addr Address of the remote device
  */
-void coap_observer_init(struct coap_observer *observer,
-			const struct coap_packet *request,
+void coap_observer_init(struct coap_observer *observer, const struct coap_packet *request,
 			const struct net_sockaddr *addr);
+
+#if defined(CONFIG_COAP_OSCORE) || defined(__DOXYGEN__)
+/**
+ * @brief Indicates that the remote device referenced by @a addr, with
+ * @a request, wants to observe a resource. As well as indicates if the
+ * remote device is sending OSCORE protected.
+ *
+ * @kconfig_dep{CONFIG_COAP_OSCORE}
+ *
+ * @param observer Observer to be initialized
+ * @param request Request on which the observer will be based
+ * @param addr Address of the remote device
+ * @param is_oscore True if the remote device is sending OSCORE protected
+ */
+void coap_observer_init_oscore(struct coap_observer *observer, const struct coap_packet *request,
+			       const struct net_sockaddr *addr, bool is_oscore);
+#endif /* CONFIG_COAP_OSCORE */
 
 /**
  * @brief After the observer is initialized, associate the observer
