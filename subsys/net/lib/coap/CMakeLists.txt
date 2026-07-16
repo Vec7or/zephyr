@@ -26,3 +26,5 @@ zephyr_sources_ifdef(CONFIG_COAP_CLIENT_TCP
 zephyr_sources_ifdef(CONFIG_COAP_OSCORE
   coap_oscore.c
 )
+
+zephyr_compile_definitions_ifdef(CONFIG_COAP_OSCORE_CONTEXT_REUSE OSCORE_NVM_SUPPORT)
