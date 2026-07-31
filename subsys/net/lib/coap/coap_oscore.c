@@ -185,11 +185,14 @@ int coap_oscore_context_init(struct coap_oscore_init_params *params,
 		return -EINVAL;
 	}
 
-	/* Currently session reuse is not supported */
+#if !defined(CONFIG_COAP_OSCORE_CONTEXT_REUSE)
+	/* If context reuse is not enabled, the master secret and salt must be unique at every boot.
+	 */
 	if (!params->fresh_master_secret_salt) {
-		LOG_ERR("Session reuse is not supported; fresh_master_secret_salt must be true");
+		LOG_ERR("Session reuse is not activated. fresh_master_secret_salt must be true");
 		return -ENOTSUP;
 	}
+#endif
 
 	/* Map the Zephyr parameters onto the uoscore initialization parameters.
 	 * uoscore keeps pointers to master_secret, master_salt, id_context and
@@ -336,3 +339,45 @@ void coap_oscore_exchange_remove(struct coap_oscore_exchange *cache,
 		memset(entry, 0, sizeof(*entry));
 	}
 }
+
+#if defined(CONFIG_COAP_OSCORE_CONTEXT_REUSE)
+enum err nvm_write_ssn(const struct nvm_key_t *nvm_key, uint64_t ssn)
+{
+	int ret;
+	struct coap_oscore_context_reuse_key key = {.sender_id = nvm_key->sender_id.ptr,
+						    .sender_id_len = nvm_key->sender_id.len,
+						    .recipient_id = nvm_key->recipient_id.ptr,
+						    .recipient_id_len = nvm_key->recipient_id.len,
+						    .id_context = nvm_key->id_context.ptr,
+						    .id_context_len = nvm_key->id_context.len};
+	ret = coap_oscore_context_reuse_write(&key, ssn);
+	if (ret != 0) {
+		LOG_ERR("Failed to write SSN to NVM: %d", ret);
+		if (ret == -ENOMEM) {
+			return buffer_to_small;
+		}
+		return unexpected_result_from_ext_lib;
+	}
+	return ok;
+}
+
+enum err nvm_read_ssn(const struct nvm_key_t *nvm_key, uint64_t *ssn)
+{
+	int ret;
+	struct coap_oscore_context_reuse_key key = {.sender_id = nvm_key->sender_id.ptr,
+						    .sender_id_len = nvm_key->sender_id.len,
+						    .recipient_id = nvm_key->recipient_id.ptr,
+						    .recipient_id_len = nvm_key->recipient_id.len,
+						    .id_context = nvm_key->id_context.ptr,
+						    .id_context_len = nvm_key->id_context.len};
+	ret = coap_oscore_context_reuse_read(&key, ssn);
+	if (ret != 0) {
+		LOG_ERR("Failed to read SSN from NVM: %d", ret);
+		if (ret == -ENOMEM) {
+			return buffer_to_small;
+		}
+		return unexpected_result_from_ext_lib;
+	}
+	return ok;
+}
+#endif /* CONFIG_COAP_OSCORE_CONTEXT_REUSE */

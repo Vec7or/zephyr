@@ -340,6 +340,7 @@ endif
 
 config COAP_OSCORE
 	bool "OSCORE support for CoAP (RFC 8613)"
+	default n
 	depends on UOSCORE
 	help
 	  Enable Object Security for Constrained RESTful Environments (OSCORE)

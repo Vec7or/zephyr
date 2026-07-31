@@ -161,6 +161,49 @@ int coap_oscore_context_init(struct coap_oscore_init_params *params,
  */
 void coap_oscore_context_free(struct coap_oscore_context *ctx);
 
+/**
+ * @brief Public fields of the security context which can be used to find the right slot in the NVM.
+ *        The usage of given fields is up to user's implementation.
+ */
+struct coap_oscore_context_reuse_key {
+	/** Sender ID (required). */
+	uint8_t *sender_id;
+	/** Length of @ref sender_id in bytes. */
+	uint32_t sender_id_len;
+	/** Recipient ID (required). */
+	uint8_t *recipient_id;
+	/** Length of @ref recipient_id in bytes. */
+	uint32_t recipient_id_len;
+	/** ID Context (required). */
+	uint8_t *id_context;
+	/** Length of @ref id_context in bytes. */
+	uint32_t id_context_len;
+};
+
+/**
+ * @brief When the same OSCORE master secret and salt are reused through
+ *        several reboots of the device, e.g., no fresh shared secret is
+ *        derived through EDHOC (or some other method) the Sender Sequence
+ *        Number MUST be stored periodically in NVM.
+ * @param key part of the context that is permitted to be used for identifying the right store
+ * slot in NVM.
+ * @param ssn SSN to be written in NVM.
+ * @retval 0 if ok negative error code if storing the SSN was not possible.
+ */
+int coap_oscore_context_reuse_write(const struct coap_oscore_context_reuse_key *key, uint64_t ssn);
+
+/**
+ * @brief Read the last persisted Sender Sequence Number (SSN) for a reused
+ *        OSCORE context from non-volatile memory.
+ *
+ * @param key Context-identifying fields used to locate the stored SSN.
+ * @param ssn Output pointer that will be set to the stored SSN value.
+ *
+ * @retval 0 on success.
+ * @retval Negative errno on failure.
+ */
+int coap_oscore_context_reuse_read(const struct coap_oscore_context_reuse_key *key, uint64_t *ssn);
+
 /** @} */
 
 #ifdef __cplusplus
