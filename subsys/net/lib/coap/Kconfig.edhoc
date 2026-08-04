@@ -1,0 +1,124 @@
+# CoAP EDHOC (RFC 9668 / RFC 9528) implementation for Zephyr
+
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config COAP_EDHOC
+	bool "EDHOC support for CoAP (RFC 9668)"
+	depends on ZCBOR
+	help
+	  Enable Ephemeral Diffie-Hellman Over COSE (EDHOC) support for CoAP.
+	  EDHOC provides lightweight authenticated key exchange for constrained
+	  devices, enabling secure OSCORE session establishment with minimal
+	  overhead.
+
+	  This option enables EDHOC option (21) handling and combined payload
+	  parsing per RFC 9668. Full EDHOC handshake processing requires the
+	  uoscore-uedhoc module (CONFIG_UEDHOC) which provides the EDHOC protocol
+	  implementation. Without it the CoAP-level plumbing is built but the
+	  cryptographic steps return -ENOTSUP.
+
+	  See RFC 9668 and RFC 9528 for details on using EDHOC with CoAP and
+	  OSCORE.
+
+if COAP_EDHOC
+
+config COAP_EDHOC_COMBINED_REQUEST
+	bool "EDHOC+OSCORE combined request support (RFC 9668)"
+	depends on COAP_OSCORE
+	help
+	  Enable support for EDHOC+OSCORE combined requests per RFC 9668
+	  Section 3. This allows clients to send EDHOC message_3 and the first
+	  OSCORE-protected application request in a single CoAP message, reducing
+	  round trips.
+
+	  The combined request carries the EDHOC option (21) and a combined
+	  payload containing both the EDHOC message_3 and the OSCORE payload.
+
+	  Requires both COAP_EDHOC and COAP_OSCORE to be enabled.
+
+if COAP_EDHOC_COMBINED_REQUEST
+
+config COAP_EDHOC_MAX_COMBINED_PAYLOAD_LEN
+	int "Maximum EDHOC+OSCORE combined payload length"
+	default 1024
+	help
+	  Maximum length in bytes for the combined payload in EDHOC+OSCORE
+	  combined requests. This includes EDHOC message_3 and the OSCORE
+	  payload. If a request exceeds this limit, it is rejected with
+	  4.00 Bad Request per RFC 9668 Section 3.3.1.
+
+	  This is a fail-closed security measure to prevent resource exhaustion.
+
+config COAP_EDHOC_SESSION_CACHE_SIZE
+	int "EDHOC session cache size per service"
+	default 4
+	range 1 255
+	help
+	  Number of EDHOC sessions to cache per CoAP service endpoint. Each
+	  session stores the EDHOC responder state keyed by the connection
+	  identifier C_R. This limits how many concurrent EDHOC handshakes can be
+	  in progress simultaneously. Sessions are removed after successful
+	  completion or timeout.
+
+config COAP_EDHOC_SESSION_LIFETIME_MS
+	int "EDHOC session lifetime in milliseconds"
+	default 60000
+	help
+	  Lifetime of a tracked EDHOC session. After this time an incomplete
+	  session is considered expired and its slot may be reused.
+
+config COAP_OSCORE_CTX_CACHE_SIZE
+	int "EDHOC-derived OSCORE context cache size per service"
+	default 4
+	range 1 255
+	help
+	  Number of EDHOC-derived OSCORE security contexts to cache per service
+	  endpoint. Each entry holds the OSCORE context derived from a completed
+	  EDHOC exchange, keyed by C_R.
+
+config COAP_OSCORE_CTX_LIFETIME_MS
+	int "EDHOC-derived OSCORE context lifetime in milliseconds"
+	default 3600000
+	help
+	  Lifetime of an EDHOC-derived OSCORE context cache entry. After this
+	  time the entry is considered expired and its slot may be reused.
+
+config COAP_EDHOC_COMBINED_OUTER_BLOCK_CACHE_SIZE
+	int "Outer Block1 reassembly cache size per service"
+	default 4
+	range 1 255
+	help
+	  Number of concurrent outer Block1 reassemblies of EDHOC+OSCORE combined
+	  requests per service endpoint, per RFC 9668 Section 3.3.2 Step 0.
+
+config COAP_EDHOC_COMBINED_OUTER_BLOCK_LIFETIME_MS
+	int "Outer Block1 reassembly lifetime in milliseconds"
+	default 60000
+	help
+	  Lifetime of an incomplete outer Block1 reassembly. After this time the
+	  partial reassembly is discarded (fail-closed).
+
+config COAP_EDHOC_COMBINED_OUTER_BLOCK_MAX_LEN
+	int "Maximum reassembled outer Block1 payload length"
+	default COAP_EDHOC_MAX_COMBINED_PAYLOAD_LEN
+	help
+	  Maximum size in bytes of a reassembled outer Block1 combined payload.
+	  Requests exceeding this limit are rejected with 4.13 Request Entity Too
+	  Large. This is a fail-closed DoS mitigation.
+
+config COAP_SERVER_WELL_KNOWN_EDHOC
+	bool "EDHOC over CoAP /.well-known/edhoc transport (RFC 9528)"
+	depends on COAP_SERVER
+	help
+	  Enable the /.well-known/edhoc resource implementing the RFC 9528
+	  Appendix A.2 forward message flow (message_1..message_4) so that a
+	  client can run the EDHOC handshake before issuing an EDHOC+OSCORE
+	  combined request.
+
+	  Enabling CONFIG_COAP_SERVER_ECHO_REQUIRE_FOR_UNSAFE is recommended as a
+	  DoS mitigation for unauthenticated message_1 handling.
+
+endif # COAP_EDHOC_COMBINED_REQUEST
+
+endif # COAP_EDHOC

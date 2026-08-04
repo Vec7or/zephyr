@@ -622,6 +622,53 @@ static int format_resource(const struct coap_resource *resource,
 	return format_attributes(attributes, response);
 }
 
+#if defined(CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC)
+/* RFC 9668 Section 6: advertise the EDHOC resource in /.well-known/core. */
+static bool has_edhoc_resource(struct coap_resource *resources, size_t resources_len)
+{
+	for (size_t i = 0; i < resources_len; ++i) {
+		const char * const *p = resources[i].path;
+
+		if (p != NULL && p[0] != NULL && p[1] != NULL && p[2] == NULL &&
+		    strcmp(p[0], ".well-known") == 0 && strcmp(p[1], "edhoc") == 0) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool edhoc_link_matches_query(const struct coap_option *query, uint8_t num_queries)
+{
+	if (num_queries == 0U) {
+		return true;
+	}
+
+	if (query->len == (sizeof("rt=core.edhoc") - 1U) &&
+	    memcmp(query->value, "rt=core.edhoc", query->len) == 0) {
+		return true;
+	}
+
+	if (query->len == (sizeof("href=/.well-known/edhoc") - 1U) &&
+	    memcmp(query->value, "href=/.well-known/edhoc", query->len) == 0) {
+		return true;
+	}
+
+	return false;
+}
+
+static int append_edhoc_link(struct coap_packet *response)
+{
+	static const char link[] = "</.well-known/edhoc>;rt=core.edhoc;ed-r;ed-comb-req";
+
+	if (!append(response, (const uint8_t *)link, sizeof(link) - 1U)) {
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+#endif /* CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC */
+
 int coap_well_known_core_get_len(struct coap_resource *resources,
 				 size_t resources_len,
 				 const struct coap_packet *request,
@@ -689,6 +736,22 @@ int coap_well_known_core_get_len(struct coap_resource *resources,
 			return r;
 		}
 	}
+
+#if defined(CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC)
+	if (!has_edhoc_resource(resources, resources_len) &&
+	    edhoc_link_matches_query(&query, num_queries)) {
+		if (!first) {
+			if (!append_u8(response, (uint8_t)',')) {
+				return -ENOMEM;
+			}
+		}
+
+		r = append_edhoc_link(response);
+		if (r < 0) {
+			return r;
+		}
+	}
+#endif /* CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC */
 
 	return 0;
 }

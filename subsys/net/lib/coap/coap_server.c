@@ -32,6 +32,19 @@ K_MEM_SLAB_DEFINE_STATIC(coap_oscore_send_buffer, ROUND_UP(COAP_SERVER_WIRE_MESS
 #define COAP_SERVER_WIRE_MESSAGE_SIZE CONFIG_COAP_SERVER_MESSAGE_SIZE
 #endif
 
+#if defined(CONFIG_COAP_EDHOC_COMBINED_REQUEST)
+#include "coap_edhoc.h"
+#include "coap_edhoc_combined_blockwise.h"
+#include "coap_edhoc_session.h"
+#include "coap_edhoc_wrappers.h"
+#include "coap_oscore_ctx_cache.h"
+#include "coap_oscore_option.h"
+#endif /* CONFIG_COAP_EDHOC_COMBINED_REQUEST */
+
+#if defined(CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC)
+#include "coap_edhoc_transport.h"
+#endif
+
 #if defined(CONFIG_NET_TC_THREAD_COOPERATIVE)
 /* Lowest priority cooperative thread */
 #define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
@@ -148,6 +161,286 @@ static int send_error_response(const struct coap_service *service,
 					  true);
 }
 #endif /* CONFIG_COAP_OSCORE */
+
+#if defined(CONFIG_COAP_EDHOC_COMBINED_REQUEST)
+/* Send an unprotected EDHOC error response (RFC 9668 Section 3.3.1) carrying a
+ * CBOR-sequence error with Content-Format application/edhoc+cbor-seq.
+ */
+static int send_edhoc_error_response(const struct coap_service *service,
+				     const struct coap_packet *request, uint8_t code,
+				     const char *diag, const struct net_sockaddr *client_addr,
+				     net_socklen_t client_addr_len)
+{
+	static uint8_t buf[CONFIG_COAP_SERVER_MESSAGE_SIZE]; /* under coap server lock */
+	uint8_t err_payload[128];
+	size_t err_len = sizeof(err_payload);
+	struct coap_packet response;
+	uint8_t token[COAP_TOKEN_MAX_LEN];
+	uint8_t tkl = coap_header_get_token(request, token);
+	uint16_t id = coap_header_get_id(request);
+	uint8_t type = (coap_header_get_type(request) == COAP_TYPE_CON) ? COAP_TYPE_ACK
+									: COAP_TYPE_NON_CON;
+	int ret;
+
+	ret = coap_edhoc_encode_error(1, diag, err_payload, &err_len);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = coap_packet_init(&response, buf, sizeof(buf), COAP_VERSION_1, type, tkl, token, code,
+			       id);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = coap_append_option_int(&response, COAP_OPTION_CONTENT_FORMAT,
+				     COAP_CONTENT_FORMAT_APP_EDHOC_CBOR_SEQ);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = coap_packet_append_payload_marker(&response);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = coap_packet_append_payload(&response, err_payload, err_len);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return coap_service_send_internal(service, &response, client_addr, client_addr_len, NULL,
+					  true);
+}
+
+/* Process an EDHOC+OSCORE combined request (RFC 9668 Section 3.3). On success
+ * the OSCORE-protected inner request is decrypted and @p request is re-parsed
+ * (referencing a static buffer) so the caller can dispatch it normally.
+ *
+ * Returns 1 when handled (continue to dispatch), 0 when an error response was
+ * already sent (caller should stop), or a negative errno on internal failure.
+ */
+static int process_edhoc_combined_request(const struct coap_service *service,
+					  struct coap_packet *request,
+					  struct coap_option *options,
+					  const struct net_sockaddr *addr, net_socklen_t addr_len)
+{
+	static uint8_t decrypted_buf[CONFIG_COAP_SERVER_MESSAGE_SIZE]; /* under lock */
+	struct coap_edhoc_span msg3;
+	struct coap_edhoc_span oscore_payload;
+	struct coap_edhoc_session *session;
+	struct coap_oscore_ctx_cache_entry *entry;
+	const uint8_t *payload;
+	uint16_t payload_len;
+	uint8_t c_r[COAP_EDHOC_CONN_ID_MAX_LEN];
+	size_t c_r_len = sizeof(c_r);
+	uint8_t c_i[COAP_EDHOC_CONN_ID_MAX_LEN];
+	size_t c_i_len = sizeof(c_i);
+	uint8_t prk_out[32];
+	size_t prk_out_len = sizeof(prk_out);
+	uint32_t decrypted_len = sizeof(decrypted_buf);
+	uint8_t error_code = COAP_RESPONSE_CODE_BAD_REQUEST;
+	uint8_t *pl;
+	uint16_t plen;
+	int ret;
+
+	/* RFC 9668 Section 3.1: the EDHOC option requires the OSCORE option. */
+	if (!coap_oscore_msg_has_oscore(request)) {
+		LOG_WRN("EDHOC option present without OSCORE option");
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_BAD_REQUEST, addr,
+					  addr_len);
+		return 0;
+	}
+
+	payload = coap_packet_get_payload(request, &payload_len);
+	if (payload == NULL || payload_len == 0U) {
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_BAD_REQUEST, addr,
+					  addr_len);
+		return 0;
+	}
+
+	if (payload_len > CONFIG_COAP_EDHOC_MAX_COMBINED_PAYLOAD_LEN) {
+		LOG_WRN("Combined payload too large (%u)", payload_len);
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_REQUEST_TOO_LARGE,
+					  addr, addr_len);
+		return 0;
+	}
+
+	ret = coap_edhoc_split_comb_payload(payload, payload_len, &msg3, &oscore_payload);
+	if (ret < 0) {
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_BAD_REQUEST, addr,
+					  addr_len);
+		return 0;
+	}
+
+	ret = coap_oscore_option_extract_kid(request, c_r, &c_r_len);
+	if (ret < 0) {
+		LOG_WRN("Failed to extract C_R from OSCORE kid (%d)", ret);
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_BAD_REQUEST, addr,
+					  addr_len);
+		return 0;
+	}
+
+	session = coap_edhoc_session_find(service->data->edhoc_session_cache,
+					  CONFIG_COAP_EDHOC_SESSION_CACHE_SIZE, c_r,
+					  (uint8_t)c_r_len);
+	if (session == NULL) {
+		LOG_WRN("No EDHOC session for combined request");
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_UNAUTHORIZED, addr,
+					  addr_len);
+		return 0;
+	}
+
+	if (session->message_4_required) {
+		LOG_WRN("EDHOC session requires message_4; combined request not allowed");
+		coap_edhoc_session_remove(service->data->edhoc_session_cache,
+					  CONFIG_COAP_EDHOC_SESSION_CACHE_SIZE, c_r,
+					  (uint8_t)c_r_len);
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_BAD_REQUEST, addr,
+					  addr_len);
+		return 0;
+	}
+
+	ret = coap_edhoc_msg3_process_wrapper(session->resp_ctx, session->runtime_ctx, msg3.ptr,
+					      msg3.len, c_i, &c_i_len, prk_out, &prk_out_len);
+	if (ret < 0) {
+		LOG_WRN("EDHOC message_3 processing failed (%d)", ret);
+		coap_edhoc_session_remove(service->data->edhoc_session_cache,
+					  CONFIG_COAP_EDHOC_SESSION_CACHE_SIZE, c_r,
+					  (uint8_t)c_r_len);
+		(void)send_edhoc_error_response(service, request, COAP_RESPONSE_CODE_BAD_REQUEST,
+						"message_3 processing failed", addr, addr_len);
+		return 0;
+	}
+
+	if (c_i_len > COAP_EDHOC_CONN_ID_MAX_LEN) {
+		(void)memset(prk_out, 0, sizeof(prk_out));
+		coap_edhoc_session_remove(service->data->edhoc_session_cache,
+					  CONFIG_COAP_EDHOC_SESSION_CACHE_SIZE, c_r,
+					  (uint8_t)c_r_len);
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_INTERNAL_ERROR, addr,
+					  addr_len);
+		return 0;
+	}
+
+	/* RFC 9528 Appendix A.1: responder Sender ID = C_I, Recipient ID = C_R. */
+	entry = coap_oscore_ctx_cache_insert(service->data->oscore_ctx_cache,
+					     CONFIG_COAP_OSCORE_CTX_CACHE_SIZE, c_r,
+					     (uint8_t)c_r_len);
+	if (entry == NULL) {
+		(void)memset(prk_out, 0, sizeof(prk_out));
+		coap_edhoc_session_remove(service->data->edhoc_session_cache,
+					  CONFIG_COAP_EDHOC_SESSION_CACHE_SIZE, c_r,
+					  (uint8_t)c_r_len);
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_SERVICE_UNAVAILABLE,
+					  addr, addr_len);
+		return 0;
+	}
+
+	entry->master_secret_len = sizeof(entry->master_secret);
+	ret = coap_edhoc_exporter_wrapper(prk_out, prk_out_len,
+					  COAP_EDHOC_EXPORT_OSCORE_MASTER_SECRET,
+					  entry->master_secret, &entry->master_secret_len);
+	if (ret == 0) {
+		entry->master_salt_len = sizeof(entry->master_salt);
+		ret = coap_edhoc_exporter_wrapper(prk_out, prk_out_len,
+						  COAP_EDHOC_EXPORT_OSCORE_MASTER_SALT,
+						  entry->master_salt, &entry->master_salt_len);
+	}
+	(void)memset(prk_out, 0, sizeof(prk_out));
+
+	if (ret < 0) {
+		LOG_WRN("Failed to derive OSCORE key material (%d)", ret);
+		coap_oscore_ctx_cache_remove(service->data->oscore_ctx_cache,
+					     CONFIG_COAP_OSCORE_CTX_CACHE_SIZE, c_r,
+					     (uint8_t)c_r_len);
+		coap_edhoc_session_remove(service->data->edhoc_session_cache,
+					  CONFIG_COAP_EDHOC_SESSION_CACHE_SIZE, c_r,
+					  (uint8_t)c_r_len);
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_INTERNAL_ERROR, addr,
+					  addr_len);
+		return 0;
+	}
+
+	memcpy(entry->sender_id, c_i, c_i_len);
+	entry->sender_id_len = (uint8_t)c_i_len;
+
+	ret = coap_oscore_context_init_wrapper(&entry->ctx, entry->master_secret,
+					       entry->master_secret_len, entry->master_salt,
+					       entry->master_salt_len, entry->sender_id,
+					       entry->sender_id_len, c_r, (uint8_t)c_r_len);
+	if (ret < 0) {
+		LOG_WRN("Failed to initialize EDHOC-derived OSCORE context (%d)", ret);
+		coap_oscore_ctx_cache_remove(service->data->oscore_ctx_cache,
+					     CONFIG_COAP_OSCORE_CTX_CACHE_SIZE, c_r,
+					     (uint8_t)c_r_len);
+		coap_edhoc_session_remove(service->data->edhoc_session_cache,
+					  CONFIG_COAP_EDHOC_SESSION_CACHE_SIZE, c_r,
+					  (uint8_t)c_r_len);
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_INTERNAL_ERROR, addr,
+					  addr_len);
+		return 0;
+	}
+
+	/* EDHOC completed; the transient session state is no longer needed. */
+	coap_edhoc_session_remove(service->data->edhoc_session_cache,
+				  CONFIG_COAP_EDHOC_SESSION_CACHE_SIZE, c_r, (uint8_t)c_r_len);
+
+	/* Reconstruct the OSCORE message: drop the EDHOC option and keep only the
+	 * OSCORE_PAYLOAD as the message body (RFC 9668 Section 3.3.1 Steps 6-7).
+	 */
+	ret = coap_edhoc_remove_option(request);
+	if (ret < 0 && ret != -ENOENT) {
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_INTERNAL_ERROR, addr,
+					  addr_len);
+		return 0;
+	}
+
+	pl = (uint8_t *)coap_packet_get_payload(request, &plen);
+	if (pl == NULL) {
+		(void)send_error_response(service, request, COAP_RESPONSE_CODE_INTERNAL_ERROR, addr,
+					  addr_len);
+		return 0;
+	}
+	memmove(pl, pl + msg3.len, oscore_payload.len);
+	request->offset -= (uint16_t)msg3.len;
+
+	/* RFC 9668 Section 3.3.1 Step 8: verify OSCORE with the derived context. */
+	ret = coap_oscore_verify(request->data, (uint32_t)request->offset, decrypted_buf,
+				 &decrypted_len, entry->ctx, &error_code);
+	if (ret < 0) {
+		LOG_WRN("Combined-request OSCORE verification failed (%d)", ret);
+		(void)send_error_response(service, request, error_code, addr, addr_len);
+		return 0;
+	}
+
+	ret = coap_packet_parse(request, decrypted_buf, decrypted_len, options, MAX_OPTIONS);
+	if (ret < 0) {
+		LOG_ERR("Failed to parse decrypted combined request (%d)", ret);
+		return ret;
+	}
+
+	request->is_oscore = true;
+
+	/* RFC 8613 Section 8.3: track the exchange to protect the response.
+	 * ponytail: the response is protected with the service OSCORE context by
+	 * coap_service_send_internal(), not the per-client EDHOC-derived context;
+	 * per-client response protection needs a larger send-path change.
+	 */
+	if (!coap_request_is_observe(request)) {
+		uint8_t token[COAP_TOKEN_MAX_LEN];
+		uint8_t tkl = coap_header_get_token(request, token);
+
+		ret = coap_oscore_exchange_add(service->data->oscore_exchange_cache, addr, addr_len,
+					       token, tkl);
+		if (ret < 0) {
+			LOG_WRN("Failed to add OSCORE exchange entry (%d)", ret);
+		}
+	}
+
+	return 1;
+}
+#endif /* CONFIG_COAP_EDHOC_COMBINED_REQUEST */
 
 static int coap_service_remove_observer(const struct coap_service *service,
 					struct coap_resource *resource,
@@ -361,6 +654,76 @@ static int coap_server_process(int sock_fd)
 
 		goto unlock;
 	}
+
+#if defined(CONFIG_COAP_EDHOC_COMBINED_REQUEST)
+	{
+		bool has_edhoc = false;
+
+		/* RFC 9668 Section 3.1 / RFC 7252 Section 5.4.5: the EDHOC option
+		 * must occur at most once.
+		 */
+		ret = coap_edhoc_validate_option(&request, &has_edhoc);
+		if (ret < 0) {
+			LOG_WRN("Repeated EDHOC option rejected");
+			if (coap_packet_is_request(&request) && type == COAP_TYPE_CON) {
+				(void)send_error_response(service, &request,
+							  COAP_RESPONSE_CODE_BAD_OPTION,
+							  net_sad(&client_addr), client_addr_len);
+			}
+			ret = 0;
+			goto unlock;
+		}
+	}
+#endif /* CONFIG_COAP_EDHOC_COMBINED_REQUEST */
+
+#if defined(CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC)
+	if (coap_header_get_code(&request) == COAP_METHOD_POST &&
+	    coap_uri_path_match(COAP_WELL_KNOWN_EDHOC_PATH, options, opt_num)) {
+		ret = coap_edhoc_transport_handle_request(service, &request, net_sad(&client_addr),
+							  client_addr_len);
+		goto unlock;
+	}
+#endif /* CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC */
+
+#if defined(CONFIG_COAP_EDHOC_COMBINED_REQUEST)
+	{
+		static uint8_t edhoc_reassembled[CONFIG_COAP_EDHOC_COMBINED_OUTER_BLOCK_MAX_LEN +
+						 128]; /* under lock */
+		size_t edhoc_reassembled_len = 0;
+		int block_ret;
+
+		/* RFC 9668 Section 3.3.2 Step 0: reassemble outer Block1 if used. */
+		block_ret = coap_edhoc_outer_block_process(service, &request, buf, (size_t)received,
+							   net_sad(&client_addr), client_addr_len,
+							   edhoc_reassembled,
+							   sizeof(edhoc_reassembled),
+							   &edhoc_reassembled_len);
+		if (block_ret == COAP_EDHOC_OUTER_BLOCK_WAITING ||
+		    block_ret == COAP_EDHOC_OUTER_BLOCK_ERROR) {
+			ret = 0;
+			goto unlock;
+		} else if (block_ret == COAP_EDHOC_OUTER_BLOCK_COMPLETE) {
+			ret = coap_packet_parse(&request, edhoc_reassembled, edhoc_reassembled_len,
+						options, opt_num);
+			if (ret < 0) {
+				LOG_ERR("Failed to parse reassembled combined request (%d)", ret);
+				goto unlock;
+			}
+			(void)coap_packet_remove_option(&request, COAP_OPTION_BLOCK1);
+			(void)coap_packet_remove_option(&request, COAP_OPTION_SIZE1);
+		}
+
+		if (coap_edhoc_msg_has_edhoc(&request)) {
+			ret = process_edhoc_combined_request(service, &request, options,
+							     net_sad(&client_addr), client_addr_len);
+			if (ret <= 0) {
+				goto unlock;
+			}
+			/* Decrypted and re-parsed: continue as a plain request. */
+			request_has_oscore = false;
+		}
+	}
+#endif /* CONFIG_COAP_EDHOC_COMBINED_REQUEST */
 
 #if defined(CONFIG_COAP_OSCORE)
 	/* RFC 8613 Section 2: Validate OSCORE message format */

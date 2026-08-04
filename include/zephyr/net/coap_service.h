@@ -47,6 +47,82 @@ extern "C" {
 
 /** @cond INTERNAL_HIDDEN */
 
+#if defined(CONFIG_COAP_EDHOC_COMBINED_REQUEST) || defined(__DOXYGEN__)
+/** Maximum length of an EDHOC connection identifier (C_R / C_I) tracked here. */
+#define COAP_EDHOC_CONN_ID_MAX_LEN 16U
+
+/**
+ * @brief EDHOC session entry.
+ *
+ * Tracks an ongoing EDHOC responder handshake keyed by the connection
+ * identifier C_R. The @p resp_ctx and @p runtime_ctx pointers are opaque
+ * handles owned by the EDHOC wrapper layer (see coap_edhoc_wrappers.c).
+ *
+ * @kconfig_dep{CONFIG_COAP_EDHOC_COMBINED_REQUEST}
+ */
+struct coap_edhoc_session {
+	uint8_t c_r[COAP_EDHOC_CONN_ID_MAX_LEN]; /**< Connection identifier C_R */
+	uint8_t c_r_len;                         /**< Length of C_R */
+	void *resp_ctx;                          /**< Opaque EDHOC responder context */
+	void *runtime_ctx;                       /**< Opaque EDHOC runtime context */
+	bool message_4_required;                 /**< True if message_4 must be sent */
+	int64_t timestamp;                       /**< Creation timestamp */
+	bool active;                             /**< True if the entry is in use */
+};
+
+/**
+ * @brief EDHOC-derived OSCORE context cache entry.
+ *
+ * Holds the OSCORE security context derived from a completed EDHOC exchange,
+ * keyed by C_R (which equals the OSCORE 'kid' the client sends). The keying
+ * material and sender ID (C_I) are stored here because
+ * coap_oscore_context_init() keeps referencing those buffers for the lifetime
+ * of the context.
+ *
+ * @kconfig_dep{CONFIG_COAP_EDHOC_COMBINED_REQUEST}
+ */
+struct coap_oscore_ctx_cache_entry {
+	uint8_t kid[COAP_EDHOC_CONN_ID_MAX_LEN]; /**< Recipient ID / C_R key */
+	uint8_t kid_len;                         /**< Length of @p kid */
+	uint8_t sender_id[COAP_EDHOC_CONN_ID_MAX_LEN]; /**< Sender ID / C_I */
+	uint8_t sender_id_len;                   /**< Length of @p sender_id */
+	uint8_t master_secret[32];               /**< Derived OSCORE Master Secret */
+	size_t master_secret_len;                /**< Length of @p master_secret */
+	uint8_t master_salt[16];                 /**< Derived OSCORE Master Salt */
+	size_t master_salt_len;                  /**< Length of @p master_salt */
+	struct coap_oscore_context *ctx;         /**< Derived OSCORE context */
+	int64_t timestamp;                       /**< Creation timestamp */
+	bool active;                             /**< True if the entry is in use */
+};
+
+/**
+ * @brief Outer Block1 reassembly entry for EDHOC+OSCORE combined requests.
+ *
+ * Tracks partial reassembly of a combined request transferred with outer
+ * Block1 (RFC 9668 Section 3.3.2 Step 0), keyed by (address, token,
+ * Request-Tag list).
+ *
+ * @kconfig_dep{CONFIG_COAP_EDHOC_COMBINED_REQUEST}
+ */
+struct coap_edhoc_outer_block_entry {
+	struct net_sockaddr_storage addr;        /**< Client address */
+	net_socklen_t addr_len;                  /**< Address length */
+	uint8_t token[COAP_TOKEN_MAX_LEN];       /**< Token from the first block */
+	uint8_t tkl;                             /**< Token length */
+	struct coap_block_context block_ctx;     /**< Block1 tracking context */
+	uint8_t header_template[128];            /**< Options up to the payload marker */
+	size_t header_template_len;              /**< Length of @p header_template */
+	uint8_t reassembly_buf[CONFIG_COAP_EDHOC_COMBINED_OUTER_BLOCK_MAX_LEN];
+						 /**< Accumulated combined payload */
+	size_t accumulated_len;                  /**< Bytes accumulated so far */
+	uint8_t request_tag_count;               /**< Number of Request-Tag options */
+	uint8_t request_tag_data[64];            /**< Serialized Request-Tag list */
+	size_t request_tag_data_len;             /**< Length of @p request_tag_data */
+	int64_t timestamp;                       /**< Creation timestamp */
+	bool active;                             /**< True if the entry is in use */
+};
+#endif /* CONFIG_COAP_EDHOC_COMBINED_REQUEST */
+
 struct coap_service_data {
 	int sock_fd;
 	struct coap_observer observers[CONFIG_COAP_SERVICE_OBSERVERS];
@@ -60,6 +136,24 @@ struct coap_service_data {
 	 */
 	struct coap_oscore_exchange *oscore_exchange_cache;
 #endif /* CONFIG_COAP_OSCORE */
+#if defined(CONFIG_COAP_EDHOC_COMBINED_REQUEST) || defined(__DOXYGEN__)
+	/**
+	 * EDHOC session cache tracking ongoing handshakes keyed by C_R.
+	 * @kconfig_dep{CONFIG_COAP_EDHOC_COMBINED_REQUEST}
+	 */
+	struct coap_edhoc_session edhoc_session_cache[CONFIG_COAP_EDHOC_SESSION_CACHE_SIZE];
+	/**
+	 * Cache of OSCORE contexts derived from completed EDHOC exchanges.
+	 * @kconfig_dep{CONFIG_COAP_EDHOC_COMBINED_REQUEST}
+	 */
+	struct coap_oscore_ctx_cache_entry oscore_ctx_cache[CONFIG_COAP_OSCORE_CTX_CACHE_SIZE];
+	/**
+	 * Outer Block1 reassembly cache for combined requests.
+	 * @kconfig_dep{CONFIG_COAP_EDHOC_COMBINED_REQUEST}
+	 */
+	struct coap_edhoc_outer_block_entry
+		edhoc_outer_block_cache[CONFIG_COAP_EDHOC_COMBINED_OUTER_BLOCK_CACHE_SIZE];
+#endif /* CONFIG_COAP_EDHOC_COMBINED_REQUEST */
 };
 
 struct coap_service {
