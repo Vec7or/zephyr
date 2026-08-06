@@ -58,6 +58,7 @@ enum coap_option_num {
 	COAP_OPTION_URI_QUERY = 15,      /**< Uri-Query */
 	COAP_OPTION_ACCEPT = 17,         /**< Accept */
 	COAP_OPTION_LOCATION_QUERY = 20, /**< Location-Query */
+	COAP_OPTION_EDHOC = 21,          /**< EDHOC (RFC 9668) */
 	COAP_OPTION_BLOCK2 = 23,         /**< Block2 (RFC 7959) */
 	COAP_OPTION_BLOCK1 = 27,         /**< Block1 (RFC 7959) */
 	COAP_OPTION_SIZE2 = 28,          /**< Size2 (RFC 7959) */
@@ -241,15 +242,18 @@ enum coap_response_code {
  * To be used when encoding or decoding a Content-Format option.
  */
 enum coap_content_format {
-	COAP_CONTENT_FORMAT_TEXT_PLAIN = 0,             /**< text/plain;charset=utf-8 */
-	COAP_CONTENT_FORMAT_APP_LINK_FORMAT = 40,       /**< application/link-format */
-	COAP_CONTENT_FORMAT_APP_XML = 41,               /**< application/xml */
-	COAP_CONTENT_FORMAT_APP_OCTET_STREAM = 42,      /**< application/octet-stream */
-	COAP_CONTENT_FORMAT_APP_EXI = 47,               /**< application/exi */
-	COAP_CONTENT_FORMAT_APP_JSON = 50,              /**< application/json */
-	COAP_CONTENT_FORMAT_APP_JSON_PATCH_JSON = 51,   /**< application/json-patch+json */
-	COAP_CONTENT_FORMAT_APP_MERGE_PATCH_JSON = 52,  /**< application/merge-patch+json */
-	COAP_CONTENT_FORMAT_APP_CBOR = 60               /**< application/cbor */
+	COAP_CONTENT_FORMAT_TEXT_PLAIN = 0,            /**< text/plain;charset=utf-8 */
+	COAP_CONTENT_FORMAT_APP_LINK_FORMAT = 40,      /**< application/link-format */
+	COAP_CONTENT_FORMAT_APP_XML = 41,              /**< application/xml */
+	COAP_CONTENT_FORMAT_APP_OCTET_STREAM = 42,     /**< application/octet-stream */
+	COAP_CONTENT_FORMAT_APP_EXI = 47,              /**< application/exi */
+	COAP_CONTENT_FORMAT_APP_JSON = 50,             /**< application/json */
+	COAP_CONTENT_FORMAT_APP_JSON_PATCH_JSON = 51,  /**< application/json-patch+json */
+	COAP_CONTENT_FORMAT_APP_MERGE_PATCH_JSON = 52, /**< application/merge-patch+json */
+	COAP_CONTENT_FORMAT_APP_CBOR = 60,             /**< application/cbor */
+	COAP_CONTENT_FORMAT_APP_EDHOC_CBOR_SEQ = 64,   /**< application/edhoc+cbor-seq (RFC 9528) */
+	COAP_CONTENT_FORMAT_APP_CID_EDHOC_CBOR_SEQ =
+		65 /**< application/cid-edhoc+cbor-seq (RFC 9528) */
 };
 
 /**

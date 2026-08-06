@@ -1,0 +1,84 @@
+# CoAP EDHOC (RFC 9528) implementation for Zephyr
+
+# Copyright The Zephyr Project Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+config COAP_EDHOC
+	bool "EDHOC support for CoAP (RFC 9528)"
+	depends on COAP_OSCORE
+	depends on ZCBOR && ZCBOR_CANONICAL
+	select UEDHOC
+	select TLS_CREDENTIALS
+	help
+	  Enable Ephemeral Diffie-Hellman Over COSE (EDHOC) support for CoAP.
+	  EDHOC provides lightweight authenticated key exchange for constrained
+	  devices, establishing an OSCORE security context between an initiator
+	  (client) and a responder (server).
+
+	  This option enables the server-side /.well-known/edhoc transport
+	  (RFC 9528 Appendix A.2). The cryptographic handshake is performed by
+	  the uoscore-uedhoc module (CONFIG_UEDHOC). The responder identity and
+	  the trusted initiator identity are loaded from Zephyr TLS credential
+	  storage (sec_tag) and selected at runtime with
+	  coap_edhoc_set_sec_tag_config().
+
+	  See RFC 9528 for details on using EDHOC over CoAP.
+
+if COAP_EDHOC
+
+config COAP_EDHOC_CACHE_SIZE
+	int "EDHOC/OSCORE cache size"
+	default 4
+	range 1 255
+	help
+	  Number of device-global EDHOC cache entries. Each entry tracks one
+	  connection identifier C_R across its lifecycle: first an in-progress
+	  EDHOC handshake, then the OSCORE security context derived from it. This
+	  bounds the combined number of concurrent EDHOC handshakes and cached
+	  EDHOC-derived OSCORE contexts. The EDHOC responder role is device
+	  scoped, so this cache is shared by all CoAP services.
+
+config COAP_EDHOC_SESSION_LIFETIME_MS
+	int "EDHOC session lifetime in milliseconds"
+	default 60000
+	help
+	  Lifetime of a tracked EDHOC session. After this time an incomplete
+	  session is considered expired and its slot may be reused.
+
+config COAP_OSCORE_CTX_LIFETIME_MS
+	int "EDHOC-derived OSCORE context lifetime in milliseconds"
+	default 3600000
+	help
+	  Lifetime of an EDHOC-derived OSCORE context cache entry. After this
+	  time the entry is considered expired and its slot may be reused.
+
+config COAP_EDHOC_MAX_DER_SIZE
+	int "Maximum DER credential blob size"
+	default 512
+	range 128 4096
+	help
+	  Upper bound, in bytes, for a single DER-encoded blob (certificate or
+	  private key) fetched from TLS credential storage while converting
+	  sec_tag material into EDHOC credentials. Blobs larger than this are
+	  rejected.
+
+config COAP_EDHOC_MAX_CRED_SIZE
+	int "Maximum converted CRED buffer size"
+	default 520
+	range 136 4104
+	help
+	  Size, in bytes, of each long-lived buffer that stores a converted CBOR
+	  CRED value (the DER certificate wrapped in a CBOR byte string). Must be
+	  large enough to hold COAP_EDHOC_MAX_DER_SIZE plus the CBOR header.
+
+config COAP_SERVER_WELL_KNOWN_EDHOC
+	bool "EDHOC over CoAP /.well-known/edhoc transport (RFC 9528)"
+	depends on COAP_SERVER
+	default y
+	help
+	  Enable the /.well-known/edhoc resource implementing the RFC 9528
+	  Appendix A.2 forward message flow (message_1 and message_3 from the
+	  initiator, message_2 in the response) so that a client can run the
+	  EDHOC handshake to establish an OSCORE security context.
+
+endif # COAP_EDHOC

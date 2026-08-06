@@ -32,6 +32,10 @@ K_MEM_SLAB_DEFINE_STATIC(coap_oscore_send_buffer, ROUND_UP(COAP_SERVER_WIRE_MESS
 #define COAP_SERVER_WIRE_MESSAGE_SIZE CONFIG_COAP_SERVER_MESSAGE_SIZE
 #endif
 
+#if defined(CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC)
+#include "coap_edhoc_transport.h"
+#endif
+
 #if defined(CONFIG_NET_TC_THREAD_COOPERATIVE)
 /* Lowest priority cooperative thread */
 #define THREAD_PRIORITY K_PRIO_COOP(CONFIG_NUM_COOP_PRIORITIES - 1)
@@ -361,6 +365,15 @@ static int coap_server_process(int sock_fd)
 
 		goto unlock;
 	}
+
+#if defined(CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC)
+	if (coap_header_get_code(&request) == COAP_METHOD_POST &&
+	    coap_uri_path_match(COAP_WELL_KNOWN_EDHOC_PATH, options, opt_num)) {
+		ret = coap_edhoc_transport_handle_request(service, &request, net_sad(&client_addr),
+							  client_addr_len);
+		goto unlock;
+	}
+#endif /* CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC */
 
 #if defined(CONFIG_COAP_OSCORE)
 	/* RFC 8613 Section 2: Validate OSCORE message format */

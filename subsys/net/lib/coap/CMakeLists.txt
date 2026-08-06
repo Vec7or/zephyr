@@ -26,3 +26,12 @@ zephyr_sources_ifdef(CONFIG_COAP_CLIENT_TCP
 zephyr_sources_ifdef(CONFIG_COAP_OSCORE
   coap_oscore.c
 )
+
+zephyr_sources_ifdef(CONFIG_COAP_EDHOC
+  coap_edhoc.c
+  coap_edhoc_cache.c
+)
+
+zephyr_sources_ifdef(CONFIG_COAP_SERVER_WELL_KNOWN_EDHOC
+  coap_edhoc_transport.c
+)
