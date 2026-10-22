@@ -2260,21 +2260,32 @@ int coap_check_unsupported_critical_options(const struct coap_packet *cpkt, uint
 		return -EINVAL;
 	}
 
+	struct coap_option option;
+	int ret;
+
 	/* RFC 8613 Section 2: OSCORE option (9) is critical.
 	 * RFC 7252 Section 5.4.1: Unrecognized critical options must be rejected.
 	 * If OSCORE support is not enabled, treat OSCORE option as unrecognized critical.
 	 */
-#if !defined(CONFIG_COAP_OSCORE)
-	struct coap_option option;
-	int ret;
-
-	ret = coap_find_options(cpkt, COAP_OPTION_OSCORE, &option, 1);
-	if (ret > 0) {
-		/* OSCORE option found but not supported in this build */
-		*opt = COAP_OPTION_OSCORE;
-		return -ENOTSUP;
+	if (!IS_ENABLED(CONFIG_COAP_OSCORE)) {
+		ret = coap_find_options(cpkt, COAP_OPTION_OSCORE, &option, 1);
+		if (ret > 0) {
+			*opt = COAP_OPTION_OSCORE;
+			return -ENOTSUP;
+		}
 	}
-#endif
+
+	/* RFC 9668 Section 3.1: the EDHOC option (21) is critical. Without EDHOC
+	 * support (which requires OSCORE) it is unrecognized and must be rejected
+	 * (RFC 7252 Section 5.4.1).
+	 */
+	if (!IS_ENABLED(CONFIG_COAP_EDHOC)) {
+		ret = coap_find_options(cpkt, COAP_OPTION_EDHOC, &option, 1);
+		if (ret > 0) {
+			*opt = COAP_OPTION_EDHOC;
+			return -ENOTSUP;
+		}
+	}
 
 	return 0;
 }

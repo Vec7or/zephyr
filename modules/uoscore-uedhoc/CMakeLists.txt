@@ -20,6 +20,7 @@ if(CONFIG_UOSCORE OR CONFIG_UEDHOC)
 
   zephyr_library_sources(
     ${UOSCORE_UEDHOC_SRC_DIR}/common/byte_array.c
+    ${UOSCORE_UEDHOC_SRC_DIR}/common/crypto_p256.c
     ${UOSCORE_UEDHOC_SRC_DIR}/common/crypto_wrapper.c
     ${UOSCORE_UEDHOC_SRC_DIR}/common/memcpy_s.c
     ${UOSCORE_UEDHOC_SRC_DIR}/common/print_util.c

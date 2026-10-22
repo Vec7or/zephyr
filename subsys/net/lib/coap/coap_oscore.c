@@ -44,10 +44,19 @@ struct coap_oscore_context {
 	uint8_t id_context_len;
 	struct k_mutex lock;
 	atomic_t refcount;
+	/* 0 for contexts that never expire; guarded by oscore_ctx_pool_lock. */
+	uint32_t lifetime_ms;
+	int64_t expires_at;
 };
 
 static struct coap_oscore_context oscore_ctx_pool[CONFIG_COAP_OSCORE_MAX_CONTEXTS];
 static K_MUTEX_DEFINE(oscore_ctx_pool_lock);
+
+/* Caller holds oscore_ctx_pool_lock. */
+static bool coap_oscore_context_expired(const struct coap_oscore_context *c, int64_t now)
+{
+	return c->lifetime_ms != 0U && now >= c->expires_at;
+}
 
 static bool coap_oscore_refcount_inc_unless_zero(atomic_t *v)
 {
@@ -267,6 +276,7 @@ int coap_oscore_verify(const struct coap_packet *request, uint8_t *oscore_msg,
 	uint8_t kid_len;
 	uint8_t id_context_len;
 	int ret;
+	int64_t now;
 	bool identity_match_found = false;
 	bool context_candidates[CONFIG_COAP_OSCORE_MAX_CONTEXTS] = {false};
 
@@ -318,13 +328,15 @@ int coap_oscore_verify(const struct coap_packet *request, uint8_t *oscore_msg,
 	 * in phase 1 keeps each candidate alive after the pool lock is dropped, and
 	 * distinct contexts therefore decrypt concurrently.
 	 */
+	now = k_uptime_get();
 	k_mutex_lock(&oscore_ctx_pool_lock, K_FOREVER);
 	for (int i = 0; i < CONFIG_COAP_OSCORE_MAX_CONTEXTS; i++) {
 		if (!coap_oscore_refcount_inc_unless_zero(&oscore_ctx_pool[i].refcount)) {
 			continue;
 		}
 
-		if (oscore_ctx_pool[i].recipient_id_len == kid_len &&
+		if (!coap_oscore_context_expired(&oscore_ctx_pool[i], now) &&
+		    oscore_ctx_pool[i].recipient_id_len == kid_len &&
 		    oscore_ctx_pool[i].id_context_len == id_context_len &&
 		    (kid_len == 0U || memcmp(oscore_ctx_pool[i].recipient_id, kid, kid_len) == 0) &&
 		    (id_context_len == 0U ||
@@ -381,15 +393,22 @@ int coap_oscore_verify(const struct coap_packet *request, uint8_t *oscore_msg,
 		return -EACCES;
 	}
 
+	k_mutex_lock(&oscore_ctx_pool_lock, K_FOREVER);
+	if ((*ctx)->lifetime_ms != 0U) {
+		(*ctx)->expires_at = k_uptime_get() + (*ctx)->lifetime_ms;
+	}
+	k_mutex_unlock(&oscore_ctx_pool_lock);
+
 	LOG_DBG("OSCORE verified message: %u -> %u bytes", oscore_msg_len, *coap_msg_len);
 	return 0;
 }
 
-int coap_oscore_context_add(const struct coap_oscore_init_params *params,
-			    struct coap_oscore_context **ctx)
+static int oscore_context_add(const struct coap_oscore_init_params *params, uint32_t lifetime_ms,
+			      struct coap_oscore_context **ctx)
 {
 	struct coap_oscore_context *slot = NULL;
 	enum err result;
+	int64_t now;
 
 	if (params == NULL || ctx == NULL ||
 	    params->aead_alg != COAP_OSCORE_AEAD_AES_CCM_16_64_128 ||
@@ -430,10 +449,19 @@ int coap_oscore_context_add(const struct coap_oscore_init_params *params,
 	}
 #endif
 
+	now = k_uptime_get();
 	k_mutex_lock(&oscore_ctx_pool_lock, K_FOREVER);
 
 	for (int i = 0; i < CONFIG_COAP_OSCORE_MAX_CONTEXTS; i++) {
 		if (atomic_get(&oscore_ctx_pool[i].refcount) == 0) {
+			slot = &oscore_ctx_pool[i];
+			break;
+		}
+
+		/* Reclaim an expired context that is no longer referenced. */
+		if (coap_oscore_context_expired(&oscore_ctx_pool[i], now) &&
+		    atomic_cas(&oscore_ctx_pool[i].refcount, 1, 0)) {
+			memset(&oscore_ctx_pool[i], 0, sizeof(oscore_ctx_pool[i]));
 			slot = &oscore_ctx_pool[i];
 			break;
 		}
@@ -490,12 +518,52 @@ int coap_oscore_context_add(const struct coap_oscore_init_params *params,
 		return -EINVAL;
 	}
 
+	slot->lifetime_ms = lifetime_ms;
+	slot->expires_at = now + lifetime_ms;
+
 	/* Needs to be last since after this the slot will be visible as live */
 	atomic_set(&slot->refcount, 1);
 
 	*ctx = slot;
 	k_mutex_unlock(&oscore_ctx_pool_lock);
 	return 0;
+}
+
+int coap_oscore_context_add(const struct coap_oscore_init_params *params,
+			    struct coap_oscore_context **ctx)
+{
+	return oscore_context_add(params, 0U, ctx);
+}
+
+int coap_oscore_context_add_expiring(const struct coap_oscore_init_params *params,
+				     uint32_t lifetime_ms, struct coap_oscore_context **ctx)
+{
+	if (lifetime_ms == 0U) {
+		return -EINVAL;
+	}
+
+	return oscore_context_add(params, lifetime_ms, ctx);
+}
+
+bool coap_oscore_recipient_id_in_use(const uint8_t *recipient_id, uint8_t recipient_id_len)
+{
+	int64_t now = k_uptime_get();
+	bool in_use = false;
+
+	k_mutex_lock(&oscore_ctx_pool_lock, K_FOREVER);
+	for (int i = 0; i < CONFIG_COAP_OSCORE_MAX_CONTEXTS; i++) {
+		const struct coap_oscore_context *c = &oscore_ctx_pool[i];
+
+		if (atomic_get(&c->refcount) != 0 && !coap_oscore_context_expired(c, now) &&
+		    c->recipient_id_len == recipient_id_len &&
+		    memcmp(c->recipient_id, recipient_id, recipient_id_len) == 0) {
+			in_use = true;
+			break;
+		}
+	}
+	k_mutex_unlock(&oscore_ctx_pool_lock);
+
+	return in_use;
 }
 
 int coap_oscore_context_remove(struct coap_oscore_context *ctx)

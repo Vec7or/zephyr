@@ -136,6 +136,36 @@ int coap_oscore_context_inc_refcount(struct coap_oscore_context *ctx);
  */
 int coap_oscore_context_dec_refcount(struct coap_oscore_context *ctx);
 
+/**
+ * @brief Add an OSCORE security context that expires when left unused
+ *
+ * Same as coap_oscore_context_add(), but the context stops matching incoming
+ * requests @p lifetime_ms after it was added or last verified a request. An
+ * expired context keeps serving holders of a reference (exchanges, observers)
+ * and its slot is reclaimed by a later add once those references are released.
+ *
+ * @param params Derivation parameters
+ * @param lifetime_ms Idle lifetime in milliseconds, must be non-zero
+ * @param ctx On success, set to the newly created context handle
+ *
+ * @return 0 on success
+ * @return -EINVAL if @p lifetime_ms is 0 or the parameters are invalid
+ * @return -ENOTSUP if context reuse is requested but not enabled
+ * @return -ENOMEM if no free or reclaimable context slot is available
+ */
+int coap_oscore_context_add_expiring(const struct coap_oscore_init_params *params,
+				     uint32_t lifetime_ms, struct coap_oscore_context **ctx);
+
+/**
+ * @brief Check whether a live, unexpired context uses a Recipient ID
+ *
+ * @param recipient_id Recipient ID to look up
+ * @param recipient_id_len Length of @p recipient_id
+ *
+ * @return true if a matching context exists, false otherwise
+ */
+bool coap_oscore_recipient_id_in_use(const uint8_t *recipient_id, uint8_t recipient_id_len);
+
 #endif /* CONFIG_COAP_OSCORE */
 
 #endif /* ZEPHYR_SUBSYS_NET_LIB_COAP_OSCORE_INTERNAL_H_ */

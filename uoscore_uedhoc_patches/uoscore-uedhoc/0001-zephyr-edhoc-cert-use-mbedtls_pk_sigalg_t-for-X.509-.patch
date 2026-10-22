@@ -1,0 +1,32 @@
+From 36ad467b6b138cc7e5a3a1933372506ac44f8b04 Mon Sep 17 00:00:00 2001
+From: Carlo Kirchmeier <carlo.kirchmeier@siemens.com>
+Date: Thu, 22 Oct 2026 09:17:58 +0200
+Subject: [PATCH] [zephyr] edhoc: cert: use mbedtls_pk_sigalg_t for X.509
+ signature check
+
+Mbed TLS 4 / TF-PSA-Crypto changed the type of mbedtls_x509_crt.sig_pk
+to mbedtls_pk_sigalg_t and moved mbedtls_pk_type_t, including
+MBEDTLS_PK_ECDSA, to a private header. Compare against
+MBEDTLS_PK_SIGALG_ECDSA, which has the same value.
+
+Assisted-by: Copilot:claude-opus-5.5
+---
+ src/edhoc/cert.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/edhoc/cert.c b/src/edhoc/cert.c
+index 435825f..06519ed 100644
+--- a/src/edhoc/cert.c
++++ b/src/edhoc/cert.c
+@@ -334,7 +334,7 @@ enum err cert_x509_verify(struct const_byte_array *cert,
+ 	enum sign_alg sign_alg;
+ 
+ 	/* make sure it is ECDSA */
+-	if (MBEDTLS_PK_ECDSA == m_cert.sig_pk) {
++	if (MBEDTLS_PK_SIGALG_ECDSA == m_cert.sig_pk) {
+ 		sign_alg = ES256;
+ 	} else {
+ 		mbedtls_x509_crt_free(&m_cert);
+-- 
+2.47.3
+
