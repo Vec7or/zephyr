@@ -34,12 +34,16 @@ Supported RFCs:
 - :rfc:`7959` - Block-Wise Transfers in the Constrained Application Protocol (CoAP)
 - :rfc:`7641` - Observing Resources in the Constrained Application Protocol (CoAP)
 - :rfc:`8613` - Object Security for Constrained RESTful Environments (OSCORE)
+- :rfc:`9528` - Ephemeral Diffie-Hellman Over COSE (EDHOC)
 
 .. note:: Not all parts of these RFCs are supported. Features are supported based on Zephyr requirements.
 
-The Zephyr CoAP library also supports Object Security for Constrained RESTful
+The Zephyr CoAP library also supports server-side Object Security for Constrained RESTful
 Environments (OSCORE) as specified in :rfc:`8613`. See :ref:`coap_oscore_interface`
 for more information.
+
+The library additionally provides server-side support for Ephemeral Diffie-Hellman Over COSE (EDHOC)
+as specified in :rfc:`9528`. See :ref:`coap_edhoc_interface` for more information.
 
 Sample Usage
 ************

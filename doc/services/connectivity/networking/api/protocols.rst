@@ -11,6 +11,7 @@ Protocols
    coap_client
    coap_server
    coap_oscore
+   coap_edhoc
    ftp_client
    http_client
    http_server
